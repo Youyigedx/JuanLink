@@ -1,0 +1,32 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+*/build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.hprof
+
+# Android
+*.jks
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 本地工具/个人配置
+.claude/
+
+# 日志与崩溃
+hs_err_pid*.log
+*.log
+
+# 发行包
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
