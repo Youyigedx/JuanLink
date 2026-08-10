@@ -81,6 +81,13 @@ class AppState(
     /** TURN 设置面板开关（桌面顶部栏/安卓顶部操作栏入口） */
     var showSettings by mutableStateOf(false)
 
+    /** TURN 配置引导面板可见性（首次启动自动弹；未配置点协作时强制弹） */
+    var showSetup by mutableStateOf(false)
+    /** 引导是否锁定（未配置点协作触发 → 不可关闭，需保存或跳过） */
+    var setupLocked by mutableStateOf(false)
+    /** 本会话是否已显式选择「仅局域网直连，跳过配置」（内存态，重启重置） */
+    var setupSkipped by mutableStateOf(false)
+
     /** 用户自定义 TURN 服务器（设置面板编辑态；空 = 仅默认公共列表） */
     var turnServers by mutableStateOf<List<TurnServer>>(emptyList())
         private set
@@ -142,6 +149,8 @@ class AppState(
             (transport as? TurnCapable)?.updateTurnServers(turnServers)
             println("[JUAN] TURN 自定义服务器已加载: ${turnServers.size} 台")
         }
+        // 首次启动未配置自定义 TURN → 自动弹配置引导（可关闭，先本地画画）
+        if (turnServers.isEmpty()) showSetup = true
 
         // 快照历史：加载持久化 + 自动捕获循环
         loadSnapshots()
@@ -181,6 +190,30 @@ class AppState(
         }
     }
 
+    /** 未配置 TURN 且未跳过 → 弹强制引导、置 statusText、返回 false（不执行协作操作） */
+    private fun requireTurnSetup(): Boolean {
+        if (turnServers.isEmpty() && !setupSkipped) {
+            showSetup = true
+            setupLocked = true
+            statusText = "请先配置 TURN 服务器，才能进行跨网协作"
+            return false
+        }
+        return true
+    }
+
+    /** 关闭引导：仅非锁定态可用；不标记跳过（点协作仍会强制引导） */
+    fun dismissSetup() {
+        if (setupLocked) return
+        showSetup = false
+    }
+
+    /** 锁定引导下显式跳过：仅局域网直连，本会话不再拦截 */
+    fun skipSetup() {
+        setupSkipped = true
+        showSetup = false
+        setupLocked = false
+    }
+
     /** 保存 TURN 服务器配置：注入传输（下次分配/连接生效）+ 持久化 */
     fun saveTurnConfig(servers: List<TurnServer>) {
         turnServers = servers
@@ -191,10 +224,16 @@ class AppState(
         } else {
             "TURN 配置已保存，自定义服务器将优先尝试"
         }
+        // 保存了至少一台服务器 → 配置完成，关闭引导（含锁定态）
+        if (servers.isNotEmpty()) {
+            showSetup = false
+            setupLocked = false
+        }
     }
 
     /** 创建协作房间（发起方）：产出二维码 + 配对码（重活放后台线程，避免 UI 冻结） */
     fun createRoom() {
+        if (!requireTurnSetup()) return
         statusText = "正在创建协作…"
         appScope.launch {
             val result = withContext(Dispatchers.Default) {
@@ -249,6 +288,7 @@ class AppState(
 
     /** 加入协作（响应方）：粘贴对方二维码连接串（TCP 连接放后台线程） */
     fun join(raw: String) {
+        if (!requireTurnSetup()) return
         val info = runCatching { PairingCodec.fromQrPayload(raw) }.getOrNull()
         if (info == null) {
             statusText = "连接串无效，请粘贴完整二维码内容"

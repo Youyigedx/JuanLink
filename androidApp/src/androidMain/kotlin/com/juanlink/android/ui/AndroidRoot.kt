@@ -214,6 +214,19 @@ fun AndroidRoot(app: AppState) {
                 }
             }
 
+            // 首次使用/未配置强制引导（覆盖连接面板；锁定态 dismissSetup 自动忽略关闭）
+            if (app.showSetup) {
+                Overlay(onDismiss = { app.dismissSetup() }) {
+                    SettingsPanel(
+                        servers = app.turnServers,
+                        onSave = { app.saveTurnConfig(it) },
+                        onClose = { app.dismissSetup() },
+                        locked = app.setupLocked,
+                        onSkip = { app.skipSetup() },
+                    )
+                }
+            }
+
             // 扫码覆盖层（最高层）
             if (showScanner) {
                 CameraScanner(

@@ -256,8 +256,27 @@ fun AppRoot() {
                 }
             }
 
-            // TURN 设置面板（覆盖层）
-            if (app.showSettings) {
+            // 首次使用/未配置强制引导（覆盖连接面板之上；锁定态 dismissSetup 自动忽略关闭）
+            if (app.showSetup) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Palette.MoHei.copy(alpha = 0.45f))
+                        .clickable { app.dismissSetup() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.wrapContentSize().clickable(enabled = false) {}) {
+                        SettingsPanel(
+                            servers = app.turnServers,
+                            onSave = { app.saveTurnConfig(it) },
+                            onClose = { app.dismissSetup() },
+                            locked = app.setupLocked,
+                            onSkip = { app.skipSetup() },
+                        )
+                    }
+                }
+            } else if (app.showSettings) {
+                // TURN 设置面板（覆盖层）
                 Box(
                     modifier = Modifier
                         .fillMaxSize()

@@ -43,6 +43,8 @@ fun SettingsPanel(
     onSave: (List<TurnServer>) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    locked: Boolean = false,       // 引导锁定态：隐藏关闭按钮、显示引导标题与跳过出口
+    onSkip: (() -> Unit)? = null,  // 锁定态下的「跳过（仅局域网直连）」出口
 ) {
     // SnapshotStateList：元素就地修改也触发重组（普通 List 改元素不触发）
     val rows = remember { mutableStateListOf<TurnServer>().apply { addAll(servers) } }
@@ -56,20 +58,23 @@ fun SettingsPanel(
     ) {
         Box(Modifier.fillMaxWidth()) {
             Text(
-                "婵娟 · TURN 设置",
+                if (locked) "首次使用 · 请先配置 TURN" else "婵娟 · TURN 设置",
                 color = Palette.MoHei,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.Center),
             )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable(onClick = onClose)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            ) {
-                Text("×", color = Palette.HuiMo, fontSize = 20.sp)
+            // 锁定态隐藏关闭按钮（引导不可关闭，只能保存或跳过）
+            if (!locked) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(onClick = onClose)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text("×", color = Palette.HuiMo, fontSize = 20.sp)
+                }
             }
         }
 
@@ -80,6 +85,14 @@ fun SettingsPanel(
             color = Palette.HuiMo,
             fontSize = 12.sp,
         )
+        if (locked) {
+            Text(
+                "跨网协作必须先配置服务器；仅局域网直连可点「跳过」继续。",
+                color = Palette.ZhuShaHong,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
 
         // 服务器列表（限高滚动，适配小屏）
         Column(
@@ -101,6 +114,10 @@ fun SettingsPanel(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             PanelButton("添加服务器", Palette.ZhuQing.copy(alpha = 0.85f)) { rows.add(TurnServer("", 3478, "", "")) }
             Spacer(Modifier.weight(1f))
+            // 锁定引导下的「仅局域网」出口：不配置也可继续局域网直连
+            if (locked && onSkip != null) {
+                PanelButton("跳过（仅局域网）", Palette.HuiMo.copy(alpha = 0.55f)) { onSkip() }
+            }
             PanelButton("保存", Palette.ZhuQing) { onSave(rows.filter { it.host.isNotBlank() }) }
         }
     }
