@@ -34,12 +34,12 @@ import com.juanlink.android.scan.CameraScanner
 import com.juanlink.composeui.AppState
 import com.juanlink.composeui.theme.JuanTheme
 import com.juanlink.composeui.theme.Palette
-import com.juanlink.composeui.ui.CanvasViewport
 import com.juanlink.composeui.ui.ConnectionPanel
+import com.juanlink.composeui.ui.DrawBoxCanvas
 import com.juanlink.composeui.ui.FloatingToolBar
 import com.juanlink.composeui.ui.HistoryPanel
-import com.juanlink.composeui.ui.LayerPanel
 import com.juanlink.composeui.ui.SettingsPanel
+import com.juanlink.composeui.ui.TextEditOverlay
 import com.juanlink.core.quality.QualityGrade
 
 /**
@@ -52,7 +52,6 @@ import com.juanlink.core.quality.QualityGrade
 @Composable
 fun AndroidRoot(app: AppState) {
     val context = LocalContext.current
-    var showLayers by remember { mutableStateOf(false) }
     var showScanner by remember { mutableStateOf(false) }
 
     // SAF 选择图片 → 字节 → 共享 importImageBytes（分块同步到对端）
@@ -67,13 +66,9 @@ fun AndroidRoot(app: AppState) {
 
     JuanTheme {
         Box(Modifier.fillMaxSize()) {
-            // 无限画布（铺满）
-            CanvasViewport(
-                document = app.document,
-                viewport = app.viewport,
-                tools = app.tools,
-                docVersion = app.docVersion,
-                onOp = { app.applyLocal(it) },
+            // 无限画布（DrawBox：缩放/平移/双指捏合内置）
+            DrawBoxCanvas(
+                host = app.host,
                 modifier = Modifier.fillMaxSize(),
             )
 
@@ -94,7 +89,6 @@ fun AndroidRoot(app: AppState) {
                 ActionChip("加入") { if (!app.isConnected) app.showConnection = true }
                 ActionChip("导入") { imagePicker.launch("image/*") }
                 ActionChip("历史") { app.showHistory = !app.showHistory }
-                ActionChip("图层") { showLayers = !showLayers }
                 ActionChip("设置") { app.showSettings = !app.showSettings }
                 // 断开连接：只要会话存在（等待配对/已连接/重连中）即可主动断开（红色警示）
                 if (app.inSession) {
@@ -121,7 +115,7 @@ fun AndroidRoot(app: AppState) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 FloatingToolBar(
-                    tools = app.tools,
+                    host = app.host,
                     onUndo = { app.undo() },
                     onRedo = { app.redo() },
                     canUndo = app.canUndo,
@@ -158,17 +152,6 @@ fun AndroidRoot(app: AppState) {
                         )
                         Text("质量 ${app.qualityText}", color = Palette.HuiMo, fontSize = 12.sp)
                     }
-                }
-            }
-
-            // 图层面板浮层
-            if (showLayers) {
-                Overlay(onDismiss = { showLayers = false }) {
-                    LayerPanel(
-                        document = app.document,
-                        docVersion = app.docVersion,
-                        onOp = { app.applyLocal(it) },
-                    )
                 }
             }
 
@@ -225,6 +208,17 @@ fun AndroidRoot(app: AppState) {
                         onSkip = { app.skipSetup() },
                     )
                 }
+            }
+
+            // 文本编辑浮层（Mode.TEXT 插入 / 双击编辑文本）
+            val editingId = app.editingTextId
+            if (editingId != null) {
+                TextEditOverlay(
+                    title = "编辑文字",
+                    initialText = app.textDraft,
+                    onCommit = { app.commitTextEdit(it) },
+                    onDismiss = { app.dismissTextEdit() },
+                )
             }
 
             // 扫码覆盖层（最高层）

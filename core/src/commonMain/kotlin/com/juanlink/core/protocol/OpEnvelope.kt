@@ -27,7 +27,10 @@ enum class OpType(val code: Int) {
     CanvasClear(30),
     CanvasMeta(31),
     Undo(40),
-    Redo(41);
+    Redo(41),
+
+    ElementUpsert(50),
+    ElementRemove(51);
 
     companion object {
         private val byCode = entries.associateBy { it.code }

@@ -1,23 +1,24 @@
 package com.juanlink.composeui
 
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import com.juanlink.composeui.draw.DrawBoxHost
+import com.juanlink.composeui.draw.DrawingSnapshot
+import com.juanlink.composeui.draw.DrawingSnapshotJson
+import com.juanlink.composeui.draw.DrawingSnapshotStore
 import com.juanlink.composeui.platform.InMemorySnapshotIo
 import com.juanlink.composeui.platform.InMemoryTurnConfigIo
 import com.juanlink.composeui.platform.SnapshotIo
 import com.juanlink.composeui.platform.TurnConfigIo
 import com.juanlink.composeui.platform.createPlatformTransport
 import com.juanlink.composeui.platform.decodeImageDimensions
-import com.juanlink.composeui.ui.ToolState
-import com.juanlink.core.canvas.CanvasDocument
-import com.juanlink.core.canvas.CanvasOp
-import com.juanlink.core.canvas.ImageTransfer
-import com.juanlink.core.canvas.OpSyncEngine
-import com.juanlink.core.model.Affine2
-import com.juanlink.core.model.Viewport
+import com.juanlink.core.draw.DrawOp
+import com.juanlink.core.draw.DrawOpCodec
+import com.juanlink.core.draw.OpSyncEngine
+import com.juanlink.core.draw.drawOpTypeCode
 import com.juanlink.core.pairing.Candidate
 import com.juanlink.core.pairing.PairingCodec
 import com.juanlink.core.pairing.PairingInfo
@@ -26,14 +27,14 @@ import com.juanlink.core.quality.QualityGrade
 import com.juanlink.core.quality.QualityMonitor
 import com.juanlink.core.session.SessionManager
 import com.juanlink.core.session.SessionState
-import com.juanlink.core.snapshot.CanvasSnapshot
-import com.juanlink.core.snapshot.SnapshotJson
-import com.juanlink.core.snapshot.SnapshotStore
 import com.juanlink.core.transport.Transport
 import com.juanlink.core.transport.TurnCapable
 import com.juanlink.core.transport.TurnConfigJson
 import com.juanlink.core.transport.TurnServer
 import com.juanlink.core.util.nowEpochMillis
+import io.ak1.drawbox.domain.model.Element
+import io.ak1.drawbox.domain.model.Intent
+import io.ak1.drawbox.domain.model.Mode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,8 +45,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 应用状态：画布 + P2P 会话 + 操作同步 + 工具状态的单一装配点。
+ * 应用状态：DrawBox 画布宿主 + P2P 会话 + 操作同步 + 快照历史的单一装配点。
  * 桌面与安卓共用；传输与快照持久化通过构造注入平台实现。
+ *
+ * 第 4 步起画布改为 DrawBox：本地意图走 [host.onLocalIntent]（diff 后广播同步
+ * op），远程元素变化由 host 的 `apply(op)` 直接改写响应式 state 驱动重组。
  */
 class AppState(
     private val transport: Transport = createPlatformTransport(),
@@ -53,14 +57,14 @@ class AppState(
     private val turnConfigIo: TurnConfigIo = InMemoryTurnConfigIo(),
 ) {
 
-    val document = CanvasDocument("canvas-1")
+    /** DrawBox 画布宿主（响应式 state + 本地意图 + SyncDocument<DrawOp>） */
+    val host = DrawBoxHost()
+
+    /** 操作同步引擎（host ↔ 会话）。单机模式也接线，未连接时 sendOp 失败无害 */
+    lateinit var drawSync: OpSyncEngine<DrawOp>
 
     private val session: SessionManager
-    val engine: OpSyncEngine
     private val pairingManager = PairingManager()
-
-    val viewport = mutableStateOf(Viewport(0f, 0f, 1f))
-    val tools = ToolState()
 
     var pairing by mutableStateOf<PairingInfo?>(null)
     var pairingCode by mutableStateOf<String?>(null)
@@ -72,10 +76,18 @@ class AppState(
     var inSession by mutableStateOf(false)
         private set
 
-    /** 撤销/重做可用性（由 engine.onStateChange 驱动，按钮据此启用） */
+    /** 撤销/重做可用性（由 drawSync.onStateChange 驱动，按钮据此启用） */
     var canUndo by mutableStateOf(false)
         private set
     var canRedo by mutableStateOf(false)
+        private set
+
+    /** 文本编辑对话框：当前编辑的文本元素 id（null = 未在编辑） */
+    var editingTextId by mutableStateOf<String?>(null)
+        private set
+
+    /** 文本编辑对话框预填内容（编辑既有文本时读当前 text；新建为空串） */
+    var textDraft by mutableStateOf("")
         private set
 
     /** TURN 设置面板开关（桌面顶部栏/安卓顶部操作栏入口） */
@@ -92,10 +104,6 @@ class AppState(
     var turnServers by mutableStateOf<List<TurnServer>>(emptyList())
         private set
 
-    /** 文档版本（文档变更时自增，驱动画布/面板重组）。暴露为 State 供组件直接订阅 */
-    private val _docVersion = mutableIntStateOf(0)
-    val docVersion: State<Int> get() = _docVersion
-
     /** 质量监测与展示 */
     private val appScope = CoroutineScope(SupervisorJob())
     private val qualityMonitor = QualityMonitor(appScope, { seq, ts -> session.sendQualityProbe(seq, ts) }, 1000)
@@ -104,9 +112,9 @@ class AppState(
     var qualityText by mutableStateOf("")
         private set
 
-    /** 画布快照历史 */
-    private val snapshotStore = SnapshotStore(50)
-    var snapshots by mutableStateOf<List<CanvasSnapshot>>(emptyList())
+    /** 画布快照历史（DrawBox SerializableDrawing JSON） */
+    private val snapshotStore = DrawingSnapshotStore(50)
+    var snapshots by mutableStateOf<List<DrawingSnapshot>>(emptyList())
         private set
     var autoIntervalSec by mutableStateOf(60)
     var showHistory by mutableStateOf(false)
@@ -114,15 +122,27 @@ class AppState(
     init {
         val deviceId = "dev-${nowEpochMillis() % 100000}"
         session = SessionManager(deviceId, transport)
-        engine = OpSyncEngine(document, deviceId, session)
-        session.opEngine = engine
+        drawSync = OpSyncEngine(
+            doc = host,
+            encodeOp = { DrawOpCodec.encode(it) },
+            decodeOp = { DrawOpCodec.decode(it) },
+            opTypeOf = { drawOpTypeCode(it) },
+            peerId = deviceId,
+            transport = session,
+        )
+        host.engine = drawSync
+        session.opEngine = drawSync
+        // 文本编辑事件缝：宿主命中 Text（新建/双击/二次点击）→ 弹编辑框并预填
+        host.onTextEditRequested = { id ->
+            editingTextId = id
+            textDraft = (host.state.elements.firstOrNull { it.id == id } as? Element.Text)?.text ?: ""
+        }
         session.onStateChanged = { state -> handleState(state) }
         session.onPongReceived = { seq, ts -> qualityMonitor.onPong(seq, ts) }
-        document.onChange = { _docVersion.value++ }
         // 撤销/重做按钮启用状态：操作应用/回放后刷新（Compose state 驱动重组）
-        engine.onStateChange = {
-            canUndo = engine.canUndo()
-            canRedo = engine.canRedo()
+        drawSync.onStateChange = {
+            canUndo = drawSync.canUndo()
+            canRedo = drawSync.canRedo()
         }
 
         appScope.launch {
@@ -168,7 +188,7 @@ class AppState(
 
     /** 手动/自动捕获画布快照 */
     fun captureSnapshot() {
-        snapshotStore.capture(document)
+        snapshotStore.capture(host.toPayLoad())
         snapshots = snapshotStore.all
         saveSnapshots()
     }
@@ -178,17 +198,67 @@ class AppState(
     }
 
     private fun saveSnapshots() {
-        runCatching { snapshotIo.save(SnapshotJson.encodeList(snapshotStore.all)) }
+        runCatching { snapshotIo.save(DrawingSnapshotJson.encodeList(snapshotStore.all)) }
     }
 
     private fun loadSnapshots() {
         runCatching {
             snapshotIo.load()?.let {
-                snapshotStore.loadAll(SnapshotJson.decodeList(it))
+                snapshotStore.loadAll(DrawingSnapshotJson.decodeList(it))
                 snapshots = snapshotStore.all
             }
         }
     }
+
+    // ================================================================ 工具状态访问器
+    // 读 DrawBox state（响应式），写经 intent（reducer 改 state + diff 广播同步 op）。
+
+    /** 当前工具模式 */
+    val currentMode: Mode get() = host.state.mode
+    /** 当前描边颜色 */
+    val strokeColor: androidx.compose.ui.graphics.Color get() = host.state.strokeColor
+    /** 当前描边粗细 */
+    val strokeWidth: Float get() = host.state.strokeWidth
+    /** 当前透明度 */
+    val opacity: Float get() = host.state.opacity
+
+    fun setMode(mode: Mode) = host.onLocalIntent(Intent.SetMode(mode))
+    fun setStrokeColor(color: androidx.compose.ui.graphics.Color) = host.onLocalIntent(Intent.SetStrokeColor(color))
+    fun setStrokeWidth(width: Float) = host.onLocalIntent(Intent.SetStrokeWidth(width))
+    fun setOpacity(value: Float) = host.onLocalIntent(Intent.SetOpacity(value))
+
+    /** 选中元素置顶/置底（替代旧图层面板） */
+    fun bringToFront() = host.onLocalIntent(Intent.BringSelectionToFront)
+    fun sendToBack() = host.onLocalIntent(Intent.SendSelectionToBack)
+    /** 删除选中元素 */
+    fun deleteSelected() = host.onLocalIntent(Intent.DeleteSelected)
+    /** 清空画布 */
+    fun clearCanvas() = host.onLocalIntent(Intent.Reset)
+
+    // ================================================================ 文本编辑
+
+    /**
+     * 提交文本编辑：UpdateText 广播同步；空串视为放弃（新建的空占位一并删除）。
+     */
+    fun commitTextEdit(text: String) {
+        val id = editingTextId ?: return
+        editingTextId = null
+        if (text.isBlank()) {
+            host.onLocalIntent(Intent.DeleteElement(id))
+        } else {
+            host.onLocalIntent(Intent.UpdateText(id, text))
+        }
+    }
+
+    /** 取消文本编辑：若元素仍是空占位则删除（Mode.TEXT 点出空框直接取消不留痕） */
+    fun dismissTextEdit() {
+        val id = editingTextId ?: return
+        editingTextId = null
+        val el = host.state.elements.firstOrNull { it.id == id }
+        if (el is Element.Text && el.text.isBlank()) host.onLocalIntent(Intent.DeleteElement(id))
+    }
+
+    // ================================================================ 协作
 
     /** 未配置 TURN 且未跳过 → 弹强制引导、置 statusText、返回 false（不执行协作操作） */
     private fun requireTurnSetup(): Boolean {
@@ -330,38 +400,32 @@ class AppState(
         showConnection = false
     }
 
-    fun applyLocal(op: CanvasOp) {
-        engine.applyLocal(op)
-    }
-
-    /** 导入图片字节到画布中心（分块同步到对端） */
+    /** 导入图片字节到画布中心（占位 upsert + 16KB 分块同步到对端） */
     fun importImageBytes(bytes: ByteArray) {
         val dims = decodeImageDimensions(bytes)
         if (dims == null || dims.first <= 0 || dims.second <= 0) {
             statusText = "无法解析图片文件"
             return
         }
-        val id = "img-${nowEpochMillis()}"
-        val vp = viewport.value
-        val transform = Affine2(e = vp.cx - dims.first / 2.0, f = vp.cy - dims.second / 2.0)
-        ImageTransfer.sendImage(
-            engine = engine,
-            imageId = id,
-            layerId = "layer-1",
-            bytes = bytes,
-            width = dims.first.toFloat(),
-            height = dims.second.toFloat(),
-            transform = transform,
+        val w = dims.first.toFloat()
+        val h = dims.second.toFloat()
+        // 以世界原点为中心放置（默认视口下即画布中心）
+        host.onLocalIntent(
+            Intent.InsertImage(
+                bytes = bytes,
+                position = Offset(-w / 2f, -h / 2f),
+                intrinsicSize = Size(w, h),
+            ),
         )
         statusText = "已导入图片（正在同步）"
     }
 
     fun undo() {
-        engine.undo()
+        drawSync.undo()
     }
 
     fun redo() {
-        engine.redo()
+        drawSync.redo()
     }
 
     private fun handleState(state: SessionState) {

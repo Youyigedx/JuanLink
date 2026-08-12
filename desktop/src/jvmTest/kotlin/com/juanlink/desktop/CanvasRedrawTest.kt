@@ -8,33 +8,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.juanlink.composeui.AppState
-import com.juanlink.composeui.ui.CanvasViewport
-import com.juanlink.composeui.ui.ToolState
-import com.juanlink.core.canvas.StrokeAdd
-import com.juanlink.core.model.RectF
-import com.juanlink.core.model.Stroke
-import com.juanlink.core.model.StrokePoint
-import com.juanlink.core.model.StrokeStyle
+import com.juanlink.composeui.ui.DrawBoxCanvas
+import io.ak1.drawbox.domain.model.Intent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * 验证画布在文档变更后必须立即重绘（不依赖按钮点击触发重组）。
+ * 机制：DrawBoxHost.state 为 Compose 响应式状态，本地意图经宿主应用后
+ * 状态变化驱动 DrawBox 重绘（不再有 docVersion 计数器）。
  */
 class CanvasRedrawTest {
-
-    private fun stroke(id: String): Stroke = Stroke(
-        id = id,
-        layerId = "layer-1",
-        points = listOf(StrokePoint(0f, 0f), StrokePoint(50f, 50f)),
-        style = StrokeStyle(),
-        bounds = RectF(0f, 0f, 50f, 50f),
-    )
 
     /** 机制验证：在 draw 块内读取 State，状态变化时 draw 必须重跑 */
     @Test
@@ -57,28 +47,24 @@ class CanvasRedrawTest {
         assertEquals(1, drawnVersions.last(), "draw 应读到最新状态值")
     }
 
-    /** 集成验证：CanvasViewport 渲染 + 应用笔画 → 文档与版本更新 */
+    /** 集成验证：DrawBox 画布渲染 + 本地画线 → 宿主状态更新（驱动重绘） */
     @Test
-    fun canvasViewportSeesStrokeAndVersion() = runComposeUiTest {
+    fun drawBoxCanvasSeesLocalStroke() = runComposeUiTest {
         val app = AppState()
         setContent {
             Box(Modifier.size(400.dp)) {
-                CanvasViewport(
-                    document = app.document,
-                    viewport = app.viewport,
-                    tools = ToolState(),
-                    docVersion = app.docVersion,
-                    onOp = { app.applyLocal(it) },
+                DrawBoxCanvas(
+                    host = app.host,
                     modifier = Modifier.size(400.dp),
                 )
             }
         }
         waitForIdle()
 
-        app.applyLocal(StrokeAdd(stroke("s1")))
+        app.host.onLocalIntent(Intent.InsertNewPath(Offset(0f, 0f)))
+        app.host.onLocalIntent(Intent.UpdateLatestPath(Offset(50f, 50f)))
         waitForIdle()
 
-        assertEquals(1, app.document.allStrokes().size, "笔画应进入文档")
-        assertEquals(1, app.docVersion.value, "文档版本应自增（驱动画布重绘）")
+        assertEquals(1, app.host.state.elements.size, "本地画线应进入宿主状态（驱动画布重绘）")
     }
 }

@@ -1,12 +1,9 @@
 package com.juanlink.core
 
-import com.juanlink.core.canvas.CanvasDocument
-import com.juanlink.core.canvas.OpSyncEngine
-import com.juanlink.core.canvas.StrokeAdd
-import com.juanlink.core.model.RectF
-import com.juanlink.core.model.Stroke
-import com.juanlink.core.model.StrokePoint
-import com.juanlink.core.model.StrokeStyle
+import com.juanlink.core.draw.DrawOp
+import com.juanlink.core.draw.MemDoc
+import com.juanlink.core.draw.memEngine
+import com.juanlink.core.draw.wireElement
 import com.juanlink.core.pairing.PairingManager
 import com.juanlink.core.protocol.QualityProbe
 import com.juanlink.core.session.SessionManager
@@ -118,50 +115,41 @@ class P2PLoopbackTest {
         runBlocking {
             val transportA = TcpTransport(bindHost = "127.0.0.1", bindPort = 0)
             val managerA = SessionManager("dev-A", transportA)
-            val docA = CanvasDocument("doc")
-            val engineA = OpSyncEngine(docA, "dev-A", managerA)
+            val docA = MemDoc()
+            val engineA = memEngine(docA, "dev-A", managerA)
             managerA.opEngine = engineA
             val pairingA = managerA.startInitiator(PairingManager())
 
             val transportB = TcpTransport()
             val managerB = SessionManager("dev-B", transportB)
-            val docB = CanvasDocument("doc")
-            val engineB = OpSyncEngine(docB, "dev-B", managerB)
+            val docB = MemDoc()
+            val engineB = memEngine(docB, "dev-B", managerB)
             managerB.opEngine = engineB
             assertTrue(managerB.connectAsResponder(pairingA))
 
             awaitUntil(5000) { managerA.isConnected && managerB.isConnected }
             assertTrue(managerA.isConnected && managerB.isConnected, "握手应完成")
 
-            // A 画一笔 → B 端实时重现
-            val strokeA = Stroke(
-                id = "s-1", layerId = "layer-1",
-                points = listOf(StrokePoint(0f, 0f), StrokePoint(5f, 5f)),
-                style = StrokeStyle(),
-                bounds = RectF(0f, 0f, 5f, 5f),
-            )
-            engineA.applyLocal(StrokeAdd(strokeA))
-            awaitUntil(5000) { docB.allStrokes().size == 1 }
-            assertEquals(1, docB.allStrokes().size, "B 应收到 A 的笔迹")
-            assertEquals("s-1", docB.allStrokes()[0].id)
-            assertEquals(2, docB.allStrokes()[0].points.size)
+            // A 画一笔（upsert 元素）→ B 端实时重现
+            engineA.applyLocal(DrawOp.ElementUpsert(wireElement("s-1", 1)))
+            awaitUntil(5000) { docB.elements.size == 1 }
+            assertEquals(1, docB.elements.size, "B 应收到 A 的笔迹")
+            assertEquals("s-1", docB.elements.keys.first())
 
             // B 画一笔 → A 端实时重现
-            val strokeB = Stroke(
-                id = "s-2", layerId = "layer-1",
-                points = listOf(StrokePoint(10f, 10f)),
-                style = StrokeStyle(),
-                bounds = RectF(10f, 10f, 10f, 10f),
-            )
-            engineB.applyLocal(StrokeAdd(strokeB))
-            awaitUntil(5000) { docA.allStrokes().size == 2 }
-            assertEquals(2, docA.allStrokes().size, "A 应收到 B 的笔迹")
+            engineB.applyLocal(DrawOp.ElementUpsert(wireElement("s-2", 1)))
+            awaitUntil(5000) { docA.elements.size == 2 }
+            assertEquals(2, docA.elements.size, "A 应收到 B 的笔迹")
 
-            // 撤销在双端一致
+            // A 删除 s-1（记录 undo）→ B 端删除；撤销 → 双端恢复
+            engineA.applyLocal(DrawOp.ElementRemove("s-1"))
+            awaitUntil(5000) { docB.elements.size == 1 }
+            assertEquals(1, docB.elements.size, "删除应同步到 B")
+
             engineA.undo()
-            awaitUntil(5000) { docB.allStrokes().size == 1 }
-            assertEquals(1, docB.allStrokes().size, "撤销应同步到 B")
-            assertEquals(1, docA.allStrokes().size)
+            awaitUntil(5000) { docB.elements.size == 2 }
+            assertEquals(2, docB.elements.size, "撤销应同步到 B")
+            assertEquals(2, docA.elements.size)
         }
     }
 

@@ -1,17 +1,43 @@
-package com.juanlink.core.canvas
+package com.juanlink.core.draw
 
 import com.juanlink.core.protocol.EnvelopeCodec
 import com.juanlink.core.protocol.OpEnvelope
 import com.juanlink.core.protocol.OpId
 import com.juanlink.core.protocol.OpTransport
-import com.juanlink.core.protocol.OpType
 import com.juanlink.core.util.SyncLock
 import com.juanlink.core.util.nowEpochMillis
 
 /**
- * 操作级同步引擎：双端状态一致的唯一入口。
+ * 文档宿主契约：操作级同步引擎对「文档」的全部要求。
  *
- * 排序模型：
+ * 由宿主实现（如 composeUi 的 DrawBoxHost），core 不关心文档具体形态。
+ * 注意：[captureInverse] 必须在 [apply] **之前**调用——逆 op 需要读取应用前的旧状态。
+ */
+interface SyncDocument<Op> {
+    /** 该 op 当前是否可应用（如：追加类 op 需要目标元素已存在） */
+    fun canApply(op: Op): Boolean
+
+    /**
+     * 捕获 op 的逆操作（apply 前调用）。返回 null 表示该 op 不可单步撤销
+     * （不记录 undo 历史，如图片分块）。
+     */
+    fun captureInverse(op: Op): Op?
+
+    /** 应用 op（幂等），返回是否实际变更了状态 */
+    fun apply(op: Op): Boolean
+
+    /**
+     * undo 同元素合并键：一次手势内对同一元素连续 upsert 应合并为一条 undo
+     * （对齐 DrawBox 手势语义——移动/改样式逐帧产生多个 upsert）。
+     * 返回 null 表示每次单独记录。
+     */
+    fun opElementKey(op: Op): String? = null
+}
+
+/**
+ * 操作级同步引擎（泛型）：双端状态一致的唯一入口。
+ *
+ * 排序模型（与元素无关，原样保留自自研引擎）：
  * - **每端出站 seq**：发送方对出站 Op 编连续序号（1,2,3…）。
  * - **每端前沿队列**：接收方按「seq 连续前缀」缓冲每端操作——未补齐的
  *   seq 缺口会阻塞该端，绝不越序应用，避免破坏单端因果。
@@ -20,13 +46,19 @@ import com.juanlink.core.util.nowEpochMillis
  *
  * 其余：ack 滑动窗口清出站、applyLog 重连补同步、撤销/重做广播逆操作。
  *
+ * 文档相关行为全部委托 [doc]（[SyncDocument]）：canApply/apply/captureInverse；
+ * op 编解码由 [encodeOp]/[decodeOp] 提供；op 类型码由 [opTypeOf] 提供。
+ *
  * 线程安全：本类被**两个线程**共享——UI 线程（applyLocal/undo/redo）与网络读线程
  * （onRemoteOp/onAck/resendOutstanding）。全部公共入口以 [lock] 互斥，防止
  * ConcurrentModificationException 与状态撕裂。锁为可重入（JVM synchronized），
  * 嵌套调用（如 undo → applyLocal）安全。
  */
-class OpSyncEngine(
-    val document: CanvasDocument,
+class OpSyncEngine<Op>(
+    private val doc: SyncDocument<Op>,
+    private val encodeOp: (Op) -> ByteArray,
+    private val decodeOp: (ByteArray) -> Op?,
+    private val opTypeOf: (Op) -> Int,
     val peerId: String,
     private val transport: OpTransport,
 ) {
@@ -51,9 +83,14 @@ class OpSyncEngine(
     private val applyLog = RingBuffer<OpEnvelope>(APPLY_LOG_CAPACITY)
 
     // ------------------------------------------------------------ 撤销历史
-    private val undoStack = ArrayDeque<UndoEntry>()
-    private val redoStack = ArrayDeque<UndoEntry>()
-    private data class UndoEntry(val forward: CanvasOp, val inverse: CanvasOp)
+    private val undoStack = ArrayDeque<UndoEntry<Op>>()
+    private val redoStack = ArrayDeque<UndoEntry<Op>>()
+    /**
+     * 撤销项。一次手势可能产生多个 op（橡皮路径分割、批量 upsert），故
+     * `forward`/`inverse` 均为列表：undo 逆序应用 inverse、redo 顺序应用
+     * forward，把一次用户操作原子地回退/重放。
+     */
+    private data class UndoEntry<Op>(val forward: List<Op>, val inverse: List<Op>)
 
     /** 事件：某端出现 seq 缺口（可触发补同步） */
     var onGapDetected: (peerId: String) -> Unit = {}
@@ -64,24 +101,42 @@ class OpSyncEngine(
     val pendingOutCount: Int get() = lock.withLock { outgoing.size }
 
     // ================================================================ 本地操作
-    fun applyLocal(op: CanvasOp, recordUndo: Boolean = true): OpId? {
-        // 锁内只做状态修改（document/outgoing/applyLog），**不持有锁**做网络发送——
+    fun applyLocal(op: Op, recordUndo: Boolean = true): OpId? =
+        applyLocalImpl(op, explicitInverse = null, recordUndo = recordUndo)
+
+    /**
+     * 应用本地 op 并记录撤销项，逆 op 由调用方**显式提供**而非 [captureInverse]。
+     * 宿主用 reducer 先行应用 intent 后，engine 的 captureInverse 捕获到的是
+     * 「手势后」状态（逆与正同值，undo 无效）；显式逆基于 diff 的 `before` 生成，
+     * undo 能正确回到手势前状态。
+     */
+    fun applyLocalWithInverse(op: Op, inverse: Op?): OpId? =
+        applyLocalImpl(op, explicitInverse = inverse, recordUndo = true)
+
+    private fun applyLocalImpl(op: Op, explicitInverse: Op?, recordUndo: Boolean): OpId? {
+        // 锁内只做状态修改（doc/outgoing/applyLog），**不持有锁**做网络发送——
         // 否则 UI 线程持 opEngine 锁时去取 RDS 发送锁，与网络线程持 RDS 锁取 opEngine
         // 锁（onAck）形成锁序相反死锁。envelope 在锁内生成，锁外发送（op 已入
         // outgoing，发送失败由重发机制兜底，不丢失）。
         val envelope: OpEnvelope? = lock.withLock {
-            if (!canApplyNow(op)) {
+            if (!doc.canApply(op)) {
                 null
             } else {
                 lamport++
                 val opId = OpId(lamport, peerId)
-                val changed = document.apply(op)
-                if (recordUndo) recordUndoEntry(op, changed)
+                // 逆 op 必须在 apply 之前捕获（读取应用前状态）
+                val inverse = if (recordUndo) {
+                    if (explicitInverse != null) explicitInverse else doc.captureInverse(op)
+                } else {
+                    null
+                }
+                doc.apply(op)
+                if (recordUndo && inverse != null) recordUndoEntry(op, inverse)
                 val env = OpEnvelope(
                     opId = opId,
                     peerId = peerId,
-                    opType = opTypeCode(op),
-                    payload = OpCodec.encode(op),
+                    opType = opTypeOf(op),
+                    payload = encodeOp(op),
                     seq = nextOutSeq++,
                     timestamp = nowEpochMillis(),
                 )
@@ -94,12 +149,6 @@ class OpSyncEngine(
         transport.sendOp(envelope)
         onStateChange()
         return envelope.opId
-    }
-
-    private fun canApplyNow(op: CanvasOp): Boolean = when (op) {
-        is StrokeAppend -> document.strokeById(op.strokeId) != null
-        is StrokeFinish -> document.strokeById(op.strokeId) != null
-        else -> true
     }
 
     // ================================================================ 远程操作
@@ -135,9 +184,9 @@ class OpSyncEngine(
             val envelope = best ?: break
             val peer = bestPeer!!
 
-            val op = OpCodec.decode(envelope.payload)
+            val op = decodeOp(envelope.payload)
             if (op != null) {
-                document.apply(op)
+                doc.apply(op)
                 applyLog.add(envelope)
                 lastAppliedOpId = envelope.opId
             }
@@ -190,63 +239,106 @@ class OpSyncEngine(
     }
 
     // ================================================================ 撤销/重做
-    private fun recordUndoEntry(op: CanvasOp, changed: Boolean) {
-        val inverse = buildInverse(op) ?: return
-        undoStack.addLast(UndoEntry(op, inverse))
+    /**
+     * 记录撤销项（单 op）。同元素手势内连续 upsert 合并为一条：
+     * `forward` 更新为最新 op，`inverse` 保留手势首次捕获的旧值（恢复即回到手势起点）。
+     */
+    private fun recordUndoEntry(op: Op, inverse: Op) {
+        val key = doc.opElementKey(op)
+        if (key != null && undoStack.isNotEmpty()) {
+            val top = undoStack.last()
+            if (top.forward.isNotEmpty() && doc.opElementKey(top.forward.last()) == key) {
+                undoStack.removeLast()
+                undoStack.addLast(UndoEntry(listOf(op), top.inverse))
+                redoStack.clear()
+                if (undoStack.size > UNDO_LIMIT) undoStack.removeFirst()
+                return
+            }
+        }
+        undoStack.addLast(UndoEntry(listOf(op), listOf(inverse)))
         redoStack.clear()
         if (undoStack.size > UNDO_LIMIT) undoStack.removeFirst()
     }
 
+    /**
+     * 批量应用一组本地 op 并记录为**一条**撤销项。用于一次手势产生多个
+     * 元素变化的场景（橡皮路径分割：主段 upsert + 新段 upsert），保证一次
+     * 撤销原子回退整次手势。
+     *
+     * 每个元素携带**显式逆**（由宿主 diff 时基于 `before` 生成）：宿主用 reducer
+     * 先行应用 intent 后，engine 若用 captureInverse 捕获，拿到的是「手势后」状态
+     * （逆与正同值，undo 无效）。显式逆在 undo 时逆序应用，跳过 captureInverse。
+     * 逆为 null 的 op（图片分块等）仍广播，但不进撤销项。
+     */
+    fun applyLocalBatch(ops: List<Pair<Op, Op?>>): Boolean {
+        if (ops.isEmpty()) return false
+        val forward = ArrayList<Op>()
+        val inverse = ArrayList<Op>()
+        val envelopes = ArrayList<OpEnvelope>()
+        lock.withLock {
+            for ((op, inv) in ops) {
+                if (!doc.canApply(op)) continue
+                doc.apply(op)
+                lamport++
+                val opId = OpId(lamport, peerId)
+                val env = OpEnvelope(
+                    opId = opId,
+                    peerId = peerId,
+                    opType = opTypeOf(op),
+                    payload = encodeOp(op),
+                    seq = nextOutSeq++,
+                    timestamp = nowEpochMillis(),
+                )
+                applyLog.add(env)
+                outgoing[env.seq] = env
+                envelopes.add(env)
+                if (inv != null) {
+                    forward.add(op)
+                    inverse.add(inv)
+                }
+            }
+        }
+        for (env in envelopes) transport.sendOp(env)
+        if (forward.isNotEmpty()) {
+            lock.withLock {
+                undoStack.addLast(UndoEntry(forward, inverse))
+                redoStack.clear()
+                if (undoStack.size > UNDO_LIMIT) undoStack.removeFirst()
+            }
+        }
+        onStateChange()
+        return forward.isNotEmpty()
+    }
+
     fun undo(): Boolean {
-        val entry: UndoEntry? = lock.withLock {
+        val entry: UndoEntry<Op>? = lock.withLock {
             val e = undoStack.removeLastOrNull() ?: null
             if (e != null) redoStack.addLast(e)
             e
         }
         if (entry == null) return false
         // 锁外发送：applyLocal 内部锁内改状态、锁外发送，避免持锁路径
-        applyLocal(entry.inverse, recordUndo = false)
+        for (op in entry.inverse.asReversed()) {
+            applyLocal(op, recordUndo = false)
+        }
         return true
     }
 
     fun redo(): Boolean {
-        val entry: UndoEntry? = lock.withLock {
+        val entry: UndoEntry<Op>? = lock.withLock {
             val e = redoStack.removeLastOrNull() ?: null
             if (e != null) undoStack.addLast(e)
             e
         }
         if (entry == null) return false
-        applyLocal(entry.forward, recordUndo = false)
+        for (op in entry.forward) {
+            applyLocal(op, recordUndo = false)
+        }
         return true
     }
 
     fun canUndo(): Boolean = lock.withLock { undoStack.isNotEmpty() }
     fun canRedo(): Boolean = lock.withLock { redoStack.isNotEmpty() }
-
-    private fun buildInverse(op: CanvasOp): CanvasOp? = when (op) {
-        is StrokeAdd -> StrokeRemove(op.stroke.id)
-        is StrokeAppend -> null
-        is StrokeFinish -> null
-        is StrokeRemove -> null // 删除撤销需保存原笔画，由增强层处理
-        is LayerAddOp -> LayerRemoveOp(op.layer.id)
-        is LayerRemoveOp -> {
-            val l = document.layerById(op.layerId) ?: return null
-            LayerAddOp(l)
-        }
-        is LayerReorderOp -> null
-        is LayerUpdateOp -> {
-            val l = document.layerById(op.layerId) ?: return null
-            LayerUpdateOp(op.layerId, l.visible, l.opacity, l.locked)
-        }
-        is CanvasClearOp -> null
-        is ImageAddOp -> ImageRemoveOp(op.imageId)
-        is ImageChunkOp -> null
-        is ImageReadyOp -> null
-        is ImageTransformOp -> null // 撤销需变换前状态，由增强层实现
-        is ImageRemoveOp -> null // 删除撤销需保存原图片，由增强层处理
-        is UndoOp -> null
-        is RedoOp -> null
-    }
 
     companion object {
         const val APPLY_LOG_CAPACITY = 20000
@@ -271,24 +363,4 @@ class RingBuffer<T>(private val capacity: Int) {
     fun lastOrNull(): T? = items.lastOrNull()
 
     fun clear() = items.clear()
-}
-
-/** OpType 编码工具 */
-internal fun opTypeCode(op: CanvasOp): Int = when (op) {
-    is StrokeAdd -> OpType.StrokeAdd.code
-    is StrokeAppend -> OpType.StrokeAppend.code
-    is StrokeFinish -> OpType.StrokeFinish.code
-    is StrokeRemove -> OpType.StrokeRemove.code
-    is LayerAddOp -> OpType.LayerAdd.code
-    is LayerRemoveOp -> OpType.LayerRemove.code
-    is LayerReorderOp -> OpType.LayerReorder.code
-    is LayerUpdateOp -> OpType.LayerUpdate.code
-    is CanvasClearOp -> OpType.CanvasClear.code
-    is ImageAddOp -> OpType.ImageAdd.code
-    is ImageChunkOp -> OpType.ImageChunk.code
-    is ImageReadyOp -> OpType.ImageReady.code
-    is ImageTransformOp -> OpType.ImageTransform.code
-    is ImageRemoveOp -> OpType.ImageRemove.code
-    is UndoOp -> OpType.Undo.code
-    is RedoOp -> OpType.Redo.code
 }

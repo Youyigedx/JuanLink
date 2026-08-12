@@ -2,14 +2,10 @@ package com.juanlink.composeui.platform
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.IntSize
-import com.juanlink.core.model.Viewport
 import com.juanlink.core.qr.QrBitmap
 import com.juanlink.core.transport.CompositeTransport
 import com.juanlink.core.transport.Transport
@@ -43,10 +39,3 @@ private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
 actual fun formatTimestamp(ms: Long): String = timeFormat.format(Date(ms))
 
 actual fun createPlatformTransport(): Transport = CompositeTransport(relay = TurnTransport())
-
-/** Android：触摸设备无鼠标滚轮，缩放手势暂不接入（返回原样） */
-@Composable
-actual fun Modifier.wheelZoom(
-    viewport: MutableState<Viewport>,
-    viewportSizeProvider: () -> IntSize,
-): Modifier = this

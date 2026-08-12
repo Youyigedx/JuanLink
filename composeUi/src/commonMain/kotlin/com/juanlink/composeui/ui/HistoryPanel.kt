@@ -1,6 +1,5 @@
 package com.juanlink.composeui.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,28 +20,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.juanlink.composeui.draw.DrawingSnapshot
 import com.juanlink.composeui.platform.formatTimestamp
 import com.juanlink.composeui.theme.Palette
-import com.juanlink.core.canvas.StrokeRasterizer
-import com.juanlink.core.snapshot.CanvasSnapshot
+import io.ak1.drawbox.DrawBox
+import io.ak1.drawbox.DrawingPreview
+import io.ak1.drawbox.domain.model.Element
+import io.ak1.drawbox.domain.model.Viewport
+import io.ak1.drawbox.domain.model.bounds
 
 /** 自动快照间隔预设（秒），0 = 关闭 */
 val AUTO_INTERVAL_PRESETS = listOf(0 to "关闭", 30 to "30秒", 60 to "1分", 120 to "2分", 300 to "5分")
 
+/** 缩略图尺寸（dp） */
+private val THUMB_WIDTH = 96.dp
+private val THUMB_HEIGHT = 64.dp
+
 /**
- * 历史记录面板：画布快照列表（时间 + 缩略图 + 笔迹数）+ 手动快照 + 自动间隔设置。
+ * 历史记录面板：DrawBox 画布快照列表（时间 + 缩略图 + 元素数）+ 手动快照 + 自动间隔设置。
+ * 缩略图用 DrawBox 原生 [DrawingPreview] 渲染，视口按元素包围盒自适应。
  */
 @Composable
 fun HistoryPanel(
-    snapshots: List<CanvasSnapshot>,
+    snapshots: List<DrawingSnapshot>,
     autoIntervalSec: Int,
     onAutoIntervalChange: (Int) -> Unit,
     onManualCapture: () -> Unit,
@@ -91,7 +96,7 @@ fun HistoryPanel(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                for ((idx, snap) in snapshots.withIndex().reversed()) {
+                for (snap in snapshots.reversed()) {
                     SnapshotRow(snap)
                 }
             }
@@ -100,7 +105,7 @@ fun HistoryPanel(
 }
 
 @Composable
-private fun SnapshotRow(snap: CanvasSnapshot) {
+private fun SnapshotRow(snap: DrawingSnapshot) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -113,51 +118,60 @@ private fun SnapshotRow(snap: CanvasSnapshot) {
         SnapshotThumb(snap)
         Column {
             Text(formatTimestamp(snap.timestamp), color = Palette.MoHei, fontSize = 12.sp)
-            Text("笔迹 ${snap.strokeCount} · 图层 ${snap.layerCount}", color = Palette.HuiMo, fontSize = 11.sp)
+            Text("元素 ${snap.elementCount}", color = Palette.HuiMo, fontSize = 11.sp)
         }
     }
 }
 
-/** 快照缩略图：把快照笔迹缩放绘制到小画布 */
+/** 快照缩略图：用 DrawBox 原生渲染器，视口按元素包围盒自适应居中 */
 @Composable
-private fun SnapshotThumb(snap: CanvasSnapshot) {
-    Canvas(Modifier.size(width = 96.dp, height = 64.dp).clip(RoundedCornerShape(6.dp)).background(Palette.XuanZhiBai)) {
-        val allPts = snap.strokes.flatMap { it.points }
-        if (allPts.isEmpty()) return@Canvas
-        var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE; var maxY = Float.MIN_VALUE
-        for (p in allPts) {
-            if (p.x < minX) minX = p.x
-            if (p.y < minY) minY = p.y
-            if (p.x > maxX) maxX = p.x
-            if (p.y > maxY) maxY = p.y
-        }
-        val w = (maxX - minX).coerceAtLeast(1f)
-        val h = (maxY - minY).coerceAtLeast(1f)
-        val scale = minOf(size.width / w, size.height / h)
-        val offX = (size.width - w * scale) / 2f - minX * scale
-        val offY = (size.height - h * scale) / 2f - minY * scale
+private fun SnapshotThumb(snap: DrawingSnapshot) {
+    val payload = snap.payload
+    val viewport = rememberThumbViewport(payload.elements)
+    DrawingPreview(
+        elements = payload.elements,
+        bgColor = payload.bgColor,
+        viewport = viewport,
+        modifier = Modifier
+            .size(width = THUMB_WIDTH, height = THUMB_HEIGHT)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Palette.XuanZhiBai),
+    )
+}
 
-        for (stroke in snap.strokes) {
-            for (seg in StrokeRasterizer.build(stroke)) {
-                val path = Path()
-                seg.points.forEachIndexed { i, p ->
-                    val sx = p.x * scale + offX
-                    val sy = p.y * scale + offY
-                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
-                }
-                drawPath(
-                    path,
-                    Color(seg.color).copy(alpha = seg.alpha.coerceIn(0f, 1f)),
-                    style = Stroke(
-                        width = (seg.width * scale).coerceAtLeast(0.8f),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
-                )
-            }
-        }
+/**
+ * 把元素包围盒适配进缩略图视口：等比缩放（上限 1，避免放大模糊）并居中。
+ * 元素为空或几何损坏 → 恒等视口。
+ */
+@Composable
+private fun rememberThumbViewport(elements: List<Element>): Viewport {
+    val boxW = with(androidx.compose.ui.platform.LocalDensity.current) { THUMB_WIDTH.toPx() }
+    val boxH = with(androidx.compose.ui.platform.LocalDensity.current) { THUMB_HEIGHT.toPx() }
+    return androidx.compose.runtime.remember(elements) { fitViewport(elements, boxW, boxH) }
+}
+
+private fun fitViewport(elements: List<Element>, boxW: Float, boxH: Float): Viewport {
+    var left = Float.MAX_VALUE
+    var top = Float.MAX_VALUE
+    var right = Float.MIN_VALUE
+    var bottom = Float.MIN_VALUE
+    var any = false
+    for (el in elements) {
+        val bb = runCatching { el.bounds() }.getOrNull() ?: continue
+        left = minOf(left, bb.left); top = minOf(top, bb.top)
+        right = maxOf(right, bb.right); bottom = maxOf(bottom, bb.bottom)
+        any = true
     }
+    if (!any || right <= left || bottom <= top) return Viewport()
+    val w = (right - left).coerceAtLeast(1f)
+    val h = (bottom - top).coerceAtLeast(1f)
+    val scale = minOf(boxW / w, boxH / h, 1f).coerceAtLeast(0.01f)
+    val cx = (left + right) / 2f
+    val cy = (top + bottom) / 2f
+    return Viewport(
+        offset = Offset(boxW / 2f - cx * scale, boxH / 2f - cy * scale),
+        scale = scale,
+    )
 }
 
 @Composable

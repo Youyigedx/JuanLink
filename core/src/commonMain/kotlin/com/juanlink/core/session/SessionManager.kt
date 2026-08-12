@@ -1,7 +1,6 @@
 package com.juanlink.core.session
 
 import com.juanlink.core.AppInfo
-import com.juanlink.core.canvas.OpSyncEngine
 import com.juanlink.core.crypto.CryptoEngine
 import com.juanlink.core.crypto.EncryptedPayload
 import com.juanlink.core.crypto.KeyPairRaw
@@ -25,6 +24,7 @@ import com.juanlink.core.protocol.Resync
 import com.juanlink.core.protocol.ResyncDone
 import com.juanlink.core.protocol.SyncRequest
 import com.juanlink.core.protocol.WireMessage
+import com.juanlink.core.draw.OpSyncEngine
 import com.juanlink.core.transport.DisconnectReason
 import com.juanlink.core.transport.PeerInfo
 import com.juanlink.core.transport.Transport
@@ -59,7 +59,7 @@ class SessionManager(
     val state: StateFlow<SessionState> get() = _state
 
     /** 操作同步引擎（接线后驱动操作级同步） */
-    var opEngine: OpSyncEngine? = null
+    var opEngine: OpSyncEngine<*>? = null
 
     /** 解密后的明文载荷回调（未接线 opEngine 时使用） */
     var onEncryptedPlain: (ByteArray) -> Unit = {}

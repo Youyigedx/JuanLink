@@ -1,9 +1,5 @@
-package com.juanlink.core.canvas
+package com.juanlink.core.draw
 
-import com.juanlink.core.model.RectF
-import com.juanlink.core.model.Stroke
-import com.juanlink.core.model.StrokePoint
-import com.juanlink.core.model.StrokeStyle
 import com.juanlink.core.protocol.EnvelopeCodec
 import com.juanlink.core.protocol.OpEnvelope
 import com.juanlink.core.protocol.OpId
@@ -16,7 +12,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-class OpSyncEngineTest {
+/**
+ * 泛型化 OpSyncEngine 的单元测试（DrawOp + MemDoc）。
+ * 覆盖排序/缓冲/ack/补同步/撤销重做全部原行为，以及新增的「同元素 undo 合并」。
+ */
+class DrawOpSyncEngineTest {
 
     private class FakeTransport : OpTransport {
         val sent = mutableListOf<OpEnvelope>()
@@ -47,74 +47,67 @@ class OpSyncEngineTest {
         override fun sendResyncDone(lastSeq: Long): Boolean = true
     }
 
-    private fun stroke(id: String): Stroke = Stroke(
-        id = id,
-        layerId = "layer-1",
-        points = listOf(StrokePoint(0f, 0f), StrokePoint(10f, 10f)),
-        style = StrokeStyle(),
-        bounds = RectF(0f, 0f, 10f, 10f),
-    )
-
-    private fun remoteEnvelope(peer: String, lamport: Long, seq: Long): OpEnvelope = OpEnvelope(
-        opId = OpId(lamport, peer),
-        peerId = peer,
-        opType = OpType.StrokeAdd.code,
-        payload = OpCodec.encode(StrokeAdd(stroke("s-$peer-$lamport"))),
-        seq = seq,
-        timestamp = 0,
-    )
+    private fun remoteEnvelope(peer: String, lamport: Long, seq: Long, elementId: String = "s-$peer-$lamport"): OpEnvelope =
+        OpEnvelope(
+            opId = OpId(lamport, peer),
+            peerId = peer,
+            opType = OpType.ElementUpsert.code,
+            payload = DrawOpCodec.encode(DrawOp.ElementUpsert(wireElement(elementId))),
+            seq = seq,
+            timestamp = 0,
+        )
 
     @Test
     fun localOpAssignedOpIdAndSent() {
         val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
-        val opId = engine.applyLocal(StrokeAdd(stroke("s1")))
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
+        val opId = engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1")))
         assertNotNull(opId)
         assertEquals("peer-A", opId!!.peerId)
         assertEquals(1, t.sent.size)
-        assertEquals(OpType.StrokeAdd.code, t.sent[0].opType)
-        assertEquals(1, doc.allStrokes().size)
+        assertEquals(OpType.ElementUpsert.code, t.sent[0].opType)
+        assertEquals(1, doc.elements.size)
     }
 
     @Test
-    fun remoteOpsApplyInLamportOrder() {
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", FakeTransport())
+    fun remoteOpsApplyInOrder() {
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", FakeTransport())
         engine.onRemoteOp(remoteEnvelope("peer-B", 1, 1))
         engine.onRemoteOp(remoteEnvelope("peer-B", 2, 2))
-        assertEquals(2, doc.allStrokes().size)
+        assertEquals(2, doc.elements.size)
     }
 
     @Test
     fun outOfOrderRemoteOpBufferedUntilGapFilled() {
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", FakeTransport())
-        // 先到 lamport=2，存在间隙（缺 lamport=1），应缓冲不应用
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", FakeTransport())
+        // 先到 seq=2，存在缺口（缺 seq=1），应缓冲不应用
         engine.onRemoteOp(remoteEnvelope("peer-B", 2, 2))
-        assertEquals(0, doc.allStrokes().size)
-        // 补齐 lamport=1 → 连续前缀全部应用
+        assertEquals(0, doc.elements.size)
+        // 补齐 seq=1 → 连续前缀全部应用
         engine.onRemoteOp(remoteEnvelope("peer-B", 1, 1))
-        assertEquals(2, doc.allStrokes().size)
+        assertEquals(2, doc.elements.size)
     }
 
     @Test
     fun duplicateRemoteOpIgnored() {
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", FakeTransport())
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", FakeTransport())
         val e = remoteEnvelope("peer-B", 1, 1)
         engine.onRemoteOp(e)
         engine.onRemoteOp(e)
-        assertEquals(1, doc.allStrokes().size)
+        assertEquals(1, doc.elements.size)
     }
 
     @Test
     fun ackClearsOutgoingWindow() {
         val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
-        engine.applyLocal(StrokeAdd(stroke("s1")))
-        engine.applyLocal(StrokeAdd(stroke("s2")))
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1")))
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e2")))
         assertEquals(2, engine.pendingOutCount)
         engine.onAck(1)
         assertEquals(1, engine.pendingOutCount)
@@ -123,38 +116,41 @@ class OpSyncEngineTest {
     }
 
     @Test
-    fun undoBroadcastsInverseAndClearsDocument() {
+    fun deleteBroadcastsInverseOnUndo() {
         val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
-        engine.applyLocal(StrokeAdd(stroke("s1")))
-        assertEquals(1, doc.allStrokes().size)
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1"))) // 新建：无 undo
+        engine.applyLocal(DrawOp.ElementRemove("e1"))              // 删除：记录 undo
+        assertEquals(0, doc.elements.size)
+        assertTrue(engine.canUndo())
         assertTrue(engine.undo())
-        assertEquals(0, doc.allStrokes().size)
-        assertEquals(OpType.StrokeRemove.code, t.sent.last().opType)
+        assertEquals(1, doc.elements.size)
+        assertEquals(OpType.ElementUpsert.code, t.sent.last().opType) // 逆 op = 恢复 upsert
         assertFalse(engine.canUndo()) // 逆操作不应再次记录
     }
 
     @Test
-    fun redoRestoresStroke() {
+    fun redoRestoresElement() {
         val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
-        engine.applyLocal(StrokeAdd(stroke("s1")))
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1")))
+        engine.applyLocal(DrawOp.ElementRemove("e1"))
         engine.undo()
-        assertEquals(0, doc.allStrokes().size)
+        assertEquals(1, doc.elements.size)
         assertTrue(engine.redo())
-        assertEquals(1, doc.allStrokes().size)
-        assertEquals(OpType.StrokeAdd.code, t.sent.last().opType)
+        assertEquals(0, doc.elements.size)
+        assertEquals(OpType.ElementRemove.code, t.sent.last().opType)
     }
 
     @Test
     fun resyncReturnsOnlyOwnOpsAfterSinceSeq() {
         val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
-        engine.applyLocal(StrokeAdd(stroke("s1"))) // my seq 1
-        engine.applyLocal(StrokeAdd(stroke("s2"))) // my seq 2
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1"))) // my seq 1
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e2"))) // my seq 2
         engine.onRemoteOp(remoteEnvelope("peer-B", 5, 1)) // B's op
         engine.onSyncRequest(sinceSeq = 1)
         assertEquals(1, t.resyncs.size)
@@ -169,27 +165,68 @@ class OpSyncEngineTest {
     @Test
     fun resyncReplayReappliesMissingOps() {
         // 模拟断线补同步：远端把 1..2 重放过来，本地只缺 2
-        val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", FakeTransport())
         engine.onRemoteOp(remoteEnvelope("peer-B", 1, 1))
         // 远端重放 1,2
         engine.onResync(listOf(
             EnvelopeCodec.encode(remoteEnvelope("peer-B", 1, 1)),
             EnvelopeCodec.encode(remoteEnvelope("peer-B", 2, 2)),
         ))
-        assertEquals(2, doc.allStrokes().size)
+        assertEquals(2, doc.elements.size)
     }
 
     @Test
     fun lamportClockMovesBeyondRemote() {
-        val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", FakeTransport())
         engine.onRemoteOp(remoteEnvelope("peer-B", 100, 1))
-        val opId = engine.applyLocal(StrokeAdd(stroke("local-after")))
+        val opId = engine.applyLocal(DrawOp.ElementUpsert(wireElement("local-after")))
         assertNotNull(opId)
         assertTrue(opId!!.lamport > 100, "本地时钟必须越过远端时钟")
+    }
+
+    @Test
+    fun sameElementUpsertsMergeIntoOneUndo() {
+        // 一次手势内对同一元素连续 upsert（如移动/改样式）应合并为一条 undo，
+        // 且 inverse 保留手势首次捕获的旧值（恢复即回到手势起点）。
+        val t = FakeTransport()
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1", version = 1)))
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1", version = 2)))
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("e1", version = 3)))
+        assertEquals(1, doc.elements.size)
+        assertTrue(engine.canUndo())
+        assertEquals("3", doc.elements["e1"]!!.modifiedAt.toString())
+
+        assertTrue(engine.undo())
+        // 合并成一条 undo：一次撤销回到手势起点（v1），而非逐帧回退
+        assertEquals(1, doc.elements.size)
+        assertEquals("1", doc.elements["e1"]!!.modifiedAt.toString())
+        assertFalse(engine.canUndo()) // 只有一条 undo
+    }
+
+    @Test
+    fun interleavedUpsertsAcrossElementsDoNotMerge() {
+        val t = FakeTransport()
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("a", version = 1))) // 新建：无 undo
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("b", version = 1))) // 新建：无 undo
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("a", version = 2))) // undo#1 (a)
+        engine.applyLocal(DrawOp.ElementUpsert(wireElement("b", version = 2))) // undo#2 (b)
+        assertTrue(engine.canUndo())
+
+        // a、b 交替 upsert：合并只对「栈顶相邻同元素」生效，各记一条 undo
+        engine.undo() // 撤销 b v2 → v1
+        assertEquals("2", doc.elements["a"]!!.modifiedAt.toString())
+        assertEquals("1", doc.elements["b"]!!.modifiedAt.toString())
+        assertTrue(engine.canUndo(), "a 的 undo 应仍在（未被吞掉）")
+
+        engine.undo() // 撤销 a v2 → v1
+        assertEquals("1", doc.elements["a"]!!.modifiedAt.toString())
+        assertFalse(engine.canUndo())
     }
 
     /**
@@ -200,8 +237,8 @@ class OpSyncEngineTest {
     @Test
     fun concurrentApplyLocalAndOnAckNoCrash() {
         val t = FakeTransport()
-        val doc = CanvasDocument("doc")
-        val engine = OpSyncEngine(doc, "peer-A", t)
+        val doc = MemDoc()
+        val engine = memEngine(doc, "peer-A", t)
 
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val errors = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
@@ -228,7 +265,7 @@ class OpSyncEngineTest {
             while (!stop.get() && i < 50_000) {
                 i++
                 try {
-                    engine.applyLocal(StrokeAdd(stroke("s-$i")))
+                    engine.applyLocal(DrawOp.ElementUpsert(wireElement("e-$i")))
                     uiOps++
                 } catch (e: Throwable) {
                     errors.add(e); stop.set(true)

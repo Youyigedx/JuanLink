@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,45 +24,49 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.juanlink.composeui.draw.DrawBoxHost
 import com.juanlink.composeui.theme.Palette
-import com.juanlink.core.model.BrushTool
+import io.ak1.drawbox.domain.model.Intent
+import io.ak1.drawbox.domain.model.Mode
 
 /** 中式色板（渲染为可点击色块） */
 private val INK_COLORS = listOf(
-    0xFF1A1A1A.toInt(),  // 墨黑
-    0xFF2F6F5E.toInt(),  // 竹青
-    0xFFC0392B.toInt(),  // 朱砂红
-    0xFF7A4E2D.toInt(),  // 赭石
-    0xFF3D5A80.toInt(),  // 黛蓝
-    0xFF9C6B30.toInt(),  // 赭黄
+    Color(0xFF1A1A1A),  // 墨黑
+    Color(0xFF2F6F5E),  // 竹青
+    Color(0xFFC0392B),  // 朱砂红
+    Color(0xFF7A4E2D),  // 赭石
+    Color(0xFF3D5A80),  // 黛蓝
+    Color(0xFF9C6B30),  // 赭黄
 )
 
+/** 工具映射：标签 → DrawBox Mode（手形/选择/画笔/图形/文字/橡皮） */
 private val TOOLS = listOf(
-    null to "手形",
-    BrushTool.Pencil to "铅笔",
-    BrushTool.Pen to "钢笔",
-    BrushTool.Calligraphy to "毛笔",
-    BrushTool.Marker to "马克笔",
-    BrushTool.Highlighter to "荧光笔",
-    BrushTool.Eraser to "橡皮",
-    BrushTool.Line to "直线",
-    BrushTool.Rect to "矩形",
-    BrushTool.Circle to "圆形",
-    BrushTool.Arrow to "箭头",
+    Mode.PAN to "手形",
+    Mode.SELECT to "选择",
+    Mode.PEN to "画笔",
+    Mode.RECTANGLE to "矩形",
+    Mode.CIRCLE to "圆形",
+    Mode.TRIANGLE to "三角形",
+    Mode.ARROW to "箭头",
+    Mode.LINE to "直线",
+    Mode.TEXT to "文字",
+    Mode.ERASER to "橡皮",
 )
 
 /**
- * 悬浮工具栏：工具格 + 色板 + 粗细/透明度 + 撤销重做。
+ * 悬浮工具栏：DrawBox 工具格 + 色板 + 粗细/透明度 + 图层(Z 序) + 撤销重做。
+ * 直连 [DrawBoxHost]：读 `host.state` 驱动选中态，写经 `host.onLocalIntent`。
  */
 @Composable
 fun FloatingToolBar(
-    tools: ToolState,
+    host: DrawBoxHost,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val state = host.state
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -77,36 +80,26 @@ fun FloatingToolBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            for ((tool, label) in TOOLS) {
-                val selected = tools.tool == tool
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (selected) Palette.ZhuQing else Color.Transparent)
-                        .clickable { tools.tool = tool }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        label,
-                        color = if (selected) Color.White else Palette.HuiMo,
-                        fontSize = 13.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    )
-                }
+            for ((mode, label) in TOOLS) {
+                val selected = state.mode == mode
+                ToolChip(
+                    label = label,
+                    selected = selected,
+                    enabled = true,
+                    onClick = { host.onLocalIntent(Intent.SetMode(mode)) },
+                )
             }
 
             Spacer(Modifier.width(8.dp))
 
             for (c in INK_COLORS) {
-                val color = Color(c)
-                val selected = tools.color == c
+                val selected = state.strokeColor == c
                 Box(
                     modifier = Modifier
                         .size(if (selected) 20.dp else 16.dp)
                         .clip(CircleShape)
-                        .background(color)
-                        .clickable { tools.color = c },
+                        .background(c)
+                        .clickable { host.onLocalIntent(Intent.SetStrokeColor(c)) },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (selected) Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
@@ -114,7 +107,7 @@ fun FloatingToolBar(
             }
         }
 
-        // 第 2 行：粗细 + 透明度 + 撤销重做（独立一行，确保滑杆完整可见不被工具行挤出）
+        // 第 2 行：粗细 + 透明度 + 图层(Z 序) + 撤销重做（独立一行，确保滑杆完整可见不被工具行挤出）
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
@@ -122,36 +115,69 @@ fun FloatingToolBar(
         ) {
             Text("粗细", color = Palette.HuiMo, fontSize = 12.sp)
             Slider(
-                value = tools.width,
-                onValueChange = { tools.width = it },
+                value = state.strokeWidth,
+                onValueChange = { host.onLocalIntent(Intent.SetStrokeWidth(it)) },
                 valueRange = 1f..30f,
                 modifier = Modifier.width(90.dp),
             )
 
             Text("透明", color = Palette.HuiMo, fontSize = 12.sp)
             Slider(
-                value = tools.alpha,
-                onValueChange = { tools.alpha = it },
+                value = state.opacity,
+                onValueChange = { host.onLocalIntent(Intent.SetOpacity(it)) },
                 valueRange = 0.05f..1f,
                 modifier = Modifier.width(70.dp),
             )
 
             Spacer(Modifier.width(8.dp))
 
-            for ((action, enabled, label) in listOf(
-                Triple({ onUndo() }, canUndo, "撤销"),
-                Triple({ onRedo() }, canRedo, "重做"),
-            )) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (enabled) Palette.ZhuQing.copy(alpha = 0.15f) else Color.Transparent)
-                        .clickable(enabled = enabled) { action.invoke() }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                ) {
-                    Text(label, color = if (enabled) Palette.ZhuQing else Palette.HuiMo.copy(alpha = 0.4f), fontSize = 13.sp)
-                }
+            // 图层控制：选中元素前移/后移（替代旧 LayerPanel 的 zIndex 需求）
+            val hasSelection = state.selectedIds.isNotEmpty()
+            ToolChip("前移", selected = false, enabled = hasSelection) {
+                host.onLocalIntent(Intent.BringSelectionToFront)
             }
+            ToolChip("后移", selected = false, enabled = hasSelection) {
+                host.onLocalIntent(Intent.SendSelectionToBack)
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            ToolChip("撤销", selected = false, enabled = canUndo, onClick = onUndo)
+            ToolChip("重做", selected = false, enabled = canRedo, onClick = onRedo)
         }
+    }
+}
+
+/** 工具/动作胶囊按钮：选中或禁用态着色 */
+@Composable
+private fun ToolChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                when {
+                    selected -> Palette.ZhuQing
+                    enabled -> Palette.ZhuQing.copy(alpha = 0.15f)
+                    else -> Color.Transparent
+                },
+            )
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Text(
+            label,
+            color = when {
+                selected -> Color.White
+                enabled -> Palette.ZhuQing
+                else -> Palette.HuiMo.copy(alpha = 0.4f)
+            },
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }

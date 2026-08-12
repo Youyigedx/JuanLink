@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.compose)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // 平台检测：有 Android SDK 才启用 androidTarget（与 :core 一致，无 SDK 机器保持纯 JVM 构建）
@@ -30,6 +31,7 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.ui)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
             implementation(project(":core"))
         }
         jvmMain.dependencies {

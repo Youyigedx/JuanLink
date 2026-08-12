@@ -1,12 +1,7 @@
 package com.juanlink.composeui.platform
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.IntSize
-import com.juanlink.core.model.Viewport
 import com.juanlink.core.qr.QrBitmap
 import com.juanlink.core.transport.Transport
 
@@ -32,16 +27,6 @@ expect fun formatTimestamp(ms: Long): String
 
 /** 平台默认传输（桌面/安卓均为 TcpTransport） */
 expect fun createPlatformTransport(): Transport
-
-/**
- * 平台鼠标滚轮缩放手势（以光标为中心缩放视口）。
- * 桌面：监听滚轮 Scroll 事件；移动端无鼠标滚轮，返回原样（触摸缩放暂未接入）。
- */
-@Composable
-expect fun Modifier.wheelZoom(
-    viewport: MutableState<Viewport>,
-    viewportSizeProvider: () -> IntSize,
-): Modifier
 
 /**
  * 快照持久化接口。

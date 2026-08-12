@@ -31,12 +31,12 @@ import com.juanlink.composeui.platform.SnapshotIo
 import com.juanlink.composeui.platform.TurnConfigIo
 import com.juanlink.composeui.theme.JuanTheme
 import com.juanlink.composeui.theme.Palette
-import com.juanlink.composeui.ui.CanvasViewport
 import com.juanlink.composeui.ui.ConnectionPanel
+import com.juanlink.composeui.ui.DrawBoxCanvas
 import com.juanlink.composeui.ui.FloatingToolBar
 import com.juanlink.composeui.ui.HistoryPanel
-import com.juanlink.composeui.ui.LayerPanel
 import com.juanlink.composeui.ui.SettingsPanel
+import com.juanlink.composeui.ui.TextEditOverlay
 import java.awt.Dimension
 import java.io.File
 import javax.swing.JFileChooser
@@ -114,24 +114,10 @@ fun AppRoot() {
     }
     JuanTheme {
         Box(Modifier.fillMaxSize()) {
-            // 无限画布
-            CanvasViewport(
-                document = app.document,
-                viewport = app.viewport,
-                tools = app.tools,
-                docVersion = app.docVersion,
-                onOp = { app.applyLocal(it) },
+            // 无限画布（DrawBox：缩放/平移/触控内置）
+            DrawBoxCanvas(
+                host = app.host,
                 modifier = Modifier.fillMaxSize(),
-            )
-
-            // 图层面板（右侧）
-            LayerPanel(
-                document = app.document,
-                docVersion = app.docVersion,
-                onOp = { app.applyLocal(it) },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 12.dp, end = 12.dp),
             )
 
             // 历史记录面板（工具栏下方左侧）
@@ -168,7 +154,7 @@ fun AppRoot() {
 
             // 悬浮工具栏（限宽 + 水平滚动，任意窗口尺寸不重叠）
             FloatingToolBar(
-                tools = app.tools,
+                host = app.host,
                 onUndo = { app.undo() },
                 onRedo = { app.redo() },
                 canUndo = app.canUndo,
@@ -214,7 +200,7 @@ fun AppRoot() {
                     }
                     // 缩放倍率（Ctrl+滚轮缩放）
                     Text(
-                        "缩放 ${(app.viewport.value.scale * 100).toInt()}%",
+                        "缩放 ${app.host.state.viewport.scalePercent}%",
                         color = Palette.HuiMo,
                         fontSize = 13.sp,
                     )
@@ -295,6 +281,17 @@ fun AppRoot() {
                         )
                     }
                 }
+            }
+
+            // 文本编辑浮层（最顶层：Mode.TEXT 插入 / 双击编辑文本）
+            val editingId = app.editingTextId
+            if (editingId != null) {
+                TextEditOverlay(
+                    title = "编辑文字",
+                    initialText = app.textDraft,
+                    onCommit = { app.commitTextEdit(it) },
+                    onDismiss = { app.dismissTextEdit() },
+                )
             }
         }
     }

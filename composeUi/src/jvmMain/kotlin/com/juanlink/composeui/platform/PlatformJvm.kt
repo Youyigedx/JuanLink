@@ -3,19 +3,13 @@
 package com.juanlink.composeui.platform
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.isCtrlPressed
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.platform.SystemFont
-import androidx.compose.ui.unit.IntSize
-import com.juanlink.core.model.Viewport
 import com.juanlink.core.qr.QrBitmap
 import com.juanlink.core.transport.CompositeTransport
 import com.juanlink.core.transport.Transport
@@ -66,33 +60,3 @@ private val timeFormat = SimpleDateFormat("HH:mm:ss")
 actual fun formatTimestamp(ms: Long): String = timeFormat.format(Date(ms))
 
 actual fun createPlatformTransport(): Transport = CompositeTransport(relay = TurnTransport())
-
-/**
- * 桌面：Ctrl + 鼠标滚轮以光标为中心缩放视口。
- * 仅 Ctrl 按住时缩放，普通滚轮不触发，避免与面板/滚动容器冲突。
- */
-@Composable
-actual fun Modifier.wheelZoom(
-    viewport: MutableState<Viewport>,
-    viewportSizeProvider: () -> IntSize,
-): Modifier = onPointerEvent(PointerEventType.Scroll) { event ->
-    val size = viewportSizeProvider()
-    val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: return@onPointerEvent
-    if (delta != 0f && event.keyboardModifiers.isCtrlPressed && size.width > 0 && size.height > 0) {
-        val vp = viewport.value
-        val cursor = event.changes.first().position
-        val wx = vp.screenToWorldX(cursor.x, size.width.toFloat())
-        val wy = vp.screenToWorldY(cursor.y, size.height.toFloat())
-        // 缩放灵敏度：归一化到"格"（鼠标一格 scrollDelta.y ≈ ±40~53）→ 每格约 ±33%。
-        // 触控板是像素级增量（绝对值极小），线性系数再大也几乎无感；
-        // 故给每个事件一个最小生效幅度（半格）→ 任何一次滚动事件都至少有 ≥12% 的可感知缩放。
-        val dir = if (delta > 0) 1f else -1f
-        val mag = kotlin.math.abs(delta)
-        val units = (mag / 40f).coerceAtLeast(0.5f) * dir
-        val factor = (1f + units * 0.25f).coerceAtLeast(0.35f)
-        val newScale = (vp.scale * factor).coerceIn(0.05f, 60f)
-        val cx = wx - (cursor.x - size.width / 2f) / newScale
-        val cy = wy - (cursor.y - size.height / 2f) / newScale
-        viewport.value = Viewport(cx, cy, newScale)
-    }
-}
