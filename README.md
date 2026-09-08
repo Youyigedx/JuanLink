@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Juan LinK — 跨平台 P2P 协作绘图" width="100%">
+  <img src="https://raw.githubusercontent.com/Youyigedx/juan-link/main/assets/banner.svg" alt="Juan LinK — 跨平台 P2P 协作绘图" width="100%">
 </p>
 
 # Juan LinK
