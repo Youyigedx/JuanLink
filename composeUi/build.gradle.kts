@@ -1,4 +1,4 @@
-// 婵娟 JUAN Link — :composeUi 共享 UI 模块（Compose Desktop + Android 共用一套 UI）
+// Juan LinK — :composeUi 共享 UI 模块（Compose Desktop + Android 共用一套 UI）
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {

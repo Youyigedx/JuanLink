@@ -1,10 +1,8 @@
-# 婵娟 JUAN Link
+# Juan LinK
 
 跨平台 **点对点（P2P）协作绘图** 应用，基于 Kotlin Multiplatform + Compose Multiplatform。
 
 两台设备通过二维码配对，**无需账号、无需中心服务器**即可实时同步画笔与橡皮。同网段走局域网 TCP 直连；跨网络（对称 NAT / 蜂窝 CGNAT）经可配置的 **TURN 中继**兜底。
-
-> 「婵娟」：千里共婵娟 —— 两地之人共享同一块画布。
 
 ## 功能
 
@@ -93,4 +91,4 @@ export JUANLINK_KEY_PASSWORD=...
 
 ## License
 
-[MIT](LICENSE) © 2026 JUAN Link contributors
+[MIT](LICENSE) © 2026 Juan LinK contributors

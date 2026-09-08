@@ -3,7 +3,7 @@ DrawBox — vendored source notice
 
 The Kotlin sources in this directory tree (package `io.ak1.drawbox`) are
 vendored from the open-source DrawBox drawing SDK and modified for use in
-the JUAN Link (婵娟) collaborative drawing app.
+the Juan LinK collaborative drawing app.
 
 Upstream
   Project:  DrawBox
@@ -17,7 +17,7 @@ Modifications (relative to upstream)
     because upstream is compiled with Kotlin 2.4.0 / Compose Multiplatform
     1.11.1, which the project's Kotlin 2.2.20 / Compose 1.9.3 toolchain
     cannot consume at the klib/metadata level.
-  - Trimmed sources that the JUAN Link host does not use: DrawBoxController,
+  - Trimmed sources that the Juan LinK host does not use: DrawBoxController,
     input/ClipboardImage, input/DragDropImage, InlineTextEditor, and the
     web/wasmJs/iOS platform source sets.
   - Minor API adaptations to compile against Kotlin 2.2.20 and Compose

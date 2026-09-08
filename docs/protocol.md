@@ -1,4 +1,4 @@
-# 婵娟 JUAN Link — 通信协议文档
+# Juan LinK — 通信协议文档
 
 > 版本：1.0 · 状态：随开发演进（阶段 2 起，阶段 8 定稿）
 > 实现位于 `core/src/commonMain/kotlin/com/juanlink/core/protocol/`、`transport/`、`session/`、`crypto/`。

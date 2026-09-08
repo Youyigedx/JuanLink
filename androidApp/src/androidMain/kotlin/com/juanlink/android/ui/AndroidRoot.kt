@@ -84,7 +84,7 @@ fun AndroidRoot(app: AppState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("婵娟", color = Palette.MoHei, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("Juan LinK", color = Palette.MoHei, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 ActionChip("创建") { if (!app.isConnected) app.createRoom() }
                 ActionChip("加入") { if (!app.isConnected) app.showConnection = true }
                 ActionChip("导入") { imagePicker.launch("image/*") }

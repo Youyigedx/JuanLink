@@ -61,7 +61,7 @@ fun ConnectionPanel(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.fillMaxWidth()) {
-            Text("婵娟 · 连接", color = Palette.MoHei, fontSize = 18.sp, modifier = Modifier.align(Alignment.Center))
+            Text("Juan LinK · 连接", color = Palette.MoHei, fontSize = 18.sp, modifier = Modifier.align(Alignment.Center))
             // 关闭按钮
             Box(
                 modifier = Modifier

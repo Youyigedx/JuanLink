@@ -1,4 +1,4 @@
-# 婵娟 JUAN Link — 数据结构文档
+# Juan LinK — 数据结构文档
 
 > 版本：1.0 · 状态：随开发演进（阶段 1 起，阶段 8 定稿）
 > 全部数据结构定义于 `core/src/commonMain/kotlin/com/juanlink/core/`，跨平台共享。

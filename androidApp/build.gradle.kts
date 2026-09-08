@@ -1,4 +1,4 @@
-// 婵娟 JUAN Link — :androidApp Android 客户端（需要 Android SDK 才启用）
+// Juan LinK — :androidApp Android 客户端（需要 Android SDK 才启用）
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.compose)

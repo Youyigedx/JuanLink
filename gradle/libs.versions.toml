@@ -1,4 +1,4 @@
-# 婵娟 JUAN Link — 版本目录（版本号已在 Maven Central 核验，2026-08）
+# Juan LinK — 版本目录（版本号已在 Maven Central 核验，2026-08）
 [versions]
 kotlin = "2.2.20"
 compose = "1.9.3"

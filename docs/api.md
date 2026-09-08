@@ -1,4 +1,4 @@
-# 婵娟 JUAN Link — API 文档
+# Juan LinK — API 文档
 
 > 核心 API 位于 `core`（KMP commonMain），桌面/移动端复用。
 > 详见 `data-structures.md`（数据结构）与 `protocol.md`（线协议）。

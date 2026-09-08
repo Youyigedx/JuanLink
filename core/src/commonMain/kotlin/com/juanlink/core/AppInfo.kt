@@ -1,13 +1,13 @@
 package com.juanlink.core
 
 /**
- * 婵娟 (JUAN Link) 全局元信息。
+ * Juan LinK 全局元信息。
  *
  * 版本与标识常量，供协议魔数、日志、UI 各处引用，保证全局一致。
  */
 object AppInfo {
     /** 应用名 */
-    const val APP_NAME: String = "婵娟 JUAN Link"
+    const val APP_NAME: String = "Juan LinK"
 
     /** 版本 */
     const val VERSION: String = "1.0.0"

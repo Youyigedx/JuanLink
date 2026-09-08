@@ -1,4 +1,4 @@
-// 婵娟 JUAN Link — :desktop Compose Desktop 壳（Windows/macOS）
+// Juan LinK — :desktop Compose Desktop 壳（Windows/macOS）
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -47,7 +47,7 @@ compose.desktop {
             // 用 createDistributable 生成免安装应用目录；需要安装包时再配置 targetFormats。
             packageName = "JuanLink"
             packageVersion = "1.0.0"
-            description = "JUAN Link"
+            description = "Juan LinK"
             // 启动器 exe 图标（Windows 需 .ico，运行时窗口图标在 Main.kt 用 painterResource 设置）
             windows {
                 iconFile.set(file("src/jvmMain/resources/icon.ico"))

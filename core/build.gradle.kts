@@ -1,4 +1,4 @@
-// 婵娟 JUAN Link — :core 纯 KMP 业务内核（无 UI）
+// Juan LinK — :core 纯 KMP 业务内核（无 UI）
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {

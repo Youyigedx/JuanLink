@@ -58,7 +58,7 @@ fun SettingsPanel(
     ) {
         Box(Modifier.fillMaxWidth()) {
             Text(
-                if (locked) "首次使用 · 请先配置 TURN" else "婵娟 · TURN 设置",
+                if (locked) "首次使用 · 请先配置 TURN" else "Juan LinK · TURN 设置",
                 color = Palette.MoHei,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,

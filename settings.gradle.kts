@@ -33,4 +33,4 @@ include(":composeUi")
 if (hasAndroidSdk) include(":androidApp")
 if (isMacHost) include(":iosApp")
 
-logger.lifecycle("JUAN Link: Android enabled=$hasAndroidSdk, iOS enabled=$isMacHost")
+logger.lifecycle("Juan LinK: Android enabled=$hasAndroidSdk, iOS enabled=$isMacHost")

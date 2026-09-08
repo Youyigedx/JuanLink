@@ -1,4 +1,4 @@
-// 婵娟 JUAN Link — :iosApp iOS 壳（仅 macOS 主机启用）
+// Juan LinK — :iosApp iOS 壳（仅 macOS 主机启用）
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.compose)

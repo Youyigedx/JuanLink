@@ -43,7 +43,7 @@ import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
- * 婵娟 JUAN Link — 桌面入口。
+ * Juan LinK — 桌面入口。
  */
 fun main() {
     // stdout 重定向到文件/管道时为块缓冲，println 不会即时落盘，导致 `[JUAN]` 日志丢失。
@@ -52,7 +52,7 @@ fun main() {
     application {
         Window(
             onCloseRequest = ::exitApplication,
-            title = "婵娟 JUAN Link",
+            title = "Juan LinK",
             icon = painterResource("icon.png"),
             state = rememberWindowState(width = 1200.dp, height = 800.dp),
         ) {
@@ -141,8 +141,7 @@ fun AppRoot() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("婵娟", color = Palette.MoHei, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text("JUAN Link", color = Palette.HuiMo, fontSize = 13.sp)
+                Text("Juan LinK", color = Palette.MoHei, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 TopButton("创建协作") {
                     if (!app.isConnected) app.createRoom()
                 }
