@@ -41,7 +41,7 @@
   <text x="500" y="204" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
         font-size="24" fill="#b1bac4">跨平台 P2P 协作绘图</text>
   <text x="500" y="238" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="17" fill="#8b949e">Cross-platform collaborative drawing &middot; no account, no central server</text>
+        font-size="17" fill="#8b949e">Cross-platform collaborative drawing · no account, no central server</text>
   <text x="500" y="266" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-        font-size="14" fill="#57606a">Kotlin Multiplatform &middot; Compose Multiplatform &middot; E2E encrypted</text>
+        font-size="14" fill="#57606a">Kotlin Multiplatform · Compose Multiplatform · E2E encrypted</text>
 </svg>
