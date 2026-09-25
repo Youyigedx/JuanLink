@@ -21,6 +21,7 @@ import com.juanlink.composeui.ui.TextEditOverlay
 import io.ak1.drawbox.domain.model.Element
 import io.ak1.drawbox.domain.model.Intent
 import io.ak1.drawbox.domain.model.Mode
+import io.ak1.drawbox.domain.model.TextAlignment
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -92,7 +93,10 @@ class TextToolUiTest {
             TextEditOverlay(
                 title = "编辑文字",
                 initialText = "",
-                onCommit = { committed.add(it) },
+                initialFontSize = 24f,
+                initialAlignment = TextAlignment.LEFT,
+                initialFontFamily = "sans",
+                onCommit = { text, _, _, _ -> committed.add(text) },
                 onDismiss = { dismissed = true },
             )
         }
@@ -115,7 +119,10 @@ class TextToolUiTest {
             TextEditOverlay(
                 title = "编辑文字",
                 initialText = "",
-                onCommit = { committed = true },
+                initialFontSize = 24f,
+                initialAlignment = TextAlignment.LEFT,
+                initialFontFamily = "sans",
+                onCommit = { _, _, _, _ -> committed = true },
                 onDismiss = { dismissed = true },
             )
         }

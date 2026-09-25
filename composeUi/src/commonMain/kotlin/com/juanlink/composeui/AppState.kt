@@ -35,6 +35,7 @@ import com.juanlink.core.util.nowEpochMillis
 import io.ak1.drawbox.domain.model.Element
 import io.ak1.drawbox.domain.model.Intent
 import io.ak1.drawbox.domain.model.Mode
+import io.ak1.drawbox.domain.model.TextAlignment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,6 +91,26 @@ class AppState(
     var textDraft by mutableStateOf("")
         private set
 
+    /** 文本编辑对话框预填字号（编辑既有文本时读当前 fontSize） */
+    var textFontSize by mutableStateOf(24f)
+        private set
+
+    /** 文本编辑对话框预填对齐（编辑既有文本时读当前 alignment） */
+    var textAlignment by mutableStateOf(TextAlignment.LEFT)
+        private set
+
+    /** 文本编辑对话框预填字体（编辑既有文本时读当前 fontFamilyKey） */
+    var textFontFamily by mutableStateOf("sans")
+        private set
+
+    /** 辅助网格开关（本地会话装饰，不同步、不进导出） */
+    var showGrid by mutableStateOf(false)
+        private set
+
+    fun toggleGrid() {
+        showGrid = !showGrid
+    }
+
     /** TURN 设置面板开关（桌面顶部栏/安卓顶部操作栏入口） */
     var showSettings by mutableStateOf(false)
 
@@ -132,10 +153,14 @@ class AppState(
         )
         host.engine = drawSync
         session.opEngine = drawSync
-        // 文本编辑事件缝：宿主命中 Text（新建/双击/二次点击）→ 弹编辑框并预填
+        // 文本编辑事件缝：宿主命中 Text（新建/双击/二次点击）→ 弹编辑框并预填内容与样式
         host.onTextEditRequested = { id ->
             editingTextId = id
-            textDraft = (host.state.elements.firstOrNull { it.id == id } as? Element.Text)?.text ?: ""
+            val el = host.state.elements.firstOrNull { it.id == id } as? Element.Text
+            textDraft = el?.text ?: ""
+            textFontSize = el?.fontSize ?: 24f
+            textAlignment = el?.alignment ?: TextAlignment.LEFT
+            textFontFamily = el?.fontFamilyKey ?: "sans"
         }
         session.onStateChanged = { state -> handleState(state) }
         session.onPongReceived = { seq, ts -> qualityMonitor.onPong(seq, ts) }
@@ -232,21 +257,31 @@ class AppState(
     fun sendToBack() = host.onLocalIntent(Intent.SendSelectionToBack)
     /** 删除选中元素 */
     fun deleteSelected() = host.onLocalIntent(Intent.DeleteSelected)
-    /** 清空画布 */
-    fun clearCanvas() = host.onLocalIntent(Intent.Reset)
+    /** 复制选中元素（宿主生成新 id + 偏移，diff 广播同步） */
+    fun duplicateSelected(): Int = host.duplicateSelected()
+    /** 清空画布：批量移除同步 + 单条撤销，保留背景色/工具样式 */
+    fun clearCanvas() = host.resetCanvas()
 
     // ================================================================ 文本编辑
 
     /**
-     * 提交文本编辑：UpdateText 广播同步；空串视为放弃（新建的空占位一并删除）。
+     * 提交文本编辑：UpdateText + 样式（字号/对齐/字体）一并广播同步；
+     * 空串视为放弃（新建的空占位一并删除）。
+     * 样式参数带默认值，旧调用（只传文本）保持兼容。
      */
-    fun commitTextEdit(text: String) {
+    fun commitTextEdit(
+        text: String,
+        fontSize: Float = 24f,
+        alignment: TextAlignment = TextAlignment.LEFT,
+        fontFamily: String = "sans",
+    ) {
         val id = editingTextId ?: return
         editingTextId = null
         if (text.isBlank()) {
             host.onLocalIntent(Intent.DeleteElement(id))
         } else {
             host.onLocalIntent(Intent.UpdateText(id, text))
+            host.applyTextStyle(id, fontSize, alignment, fontFamily)
         }
     }
 

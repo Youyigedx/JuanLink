@@ -3,6 +3,7 @@ package com.juanlink.composeui.draw
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.juanlink.core.crypto.CryptoEngine
 import com.juanlink.core.draw.DrawOp
@@ -10,12 +11,19 @@ import com.juanlink.core.draw.ImageChunking
 import com.juanlink.core.draw.OpSyncEngine
 import com.juanlink.core.draw.SyncDocument
 import com.juanlink.core.draw.WireElement
+import com.juanlink.core.util.nowEpochMillis
 import io.ak1.drawbox.domain.model.Element
 import io.ak1.drawbox.domain.model.Intent
 import io.ak1.drawbox.domain.model.PayLoad
 import io.ak1.drawbox.domain.model.State
+import io.ak1.drawbox.domain.model.TextAlignment
+import io.ak1.drawbox.domain.model.Viewport
+import io.ak1.drawbox.domain.model.toColor
+import io.ak1.drawbox.domain.model.toHexString
 import io.ak1.drawbox.domain.usecase.UseCase
 import io.ak1.drawbox.presentation.reducer.Reducer
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * DrawBox 引擎的协作宿主。
@@ -84,6 +92,16 @@ class DrawBoxHost(
      */
     fun onLocalIntent(intent: Intent) {
         when (intent) {
+            // 撤销/重做由同步引擎全权负责（跨端逆 op 严格一致）。绝不落入 reducer——
+            // reducer 的 Undo/Redo 操作其内部快照栈（宿主保持空栈不用），落入会把
+            // 引擎历史与 reducer 历史搅在一起，导致跨端撤销不一致。
+            is Intent.Undo, is Intent.Redo -> return
+            // 清空画布：走批量移除（同步 + 可撤销 + 保留背景/样式/模式），
+            // 而不是 reducer 的 Reset（State() 会重置背景色为黑、样式恢复默认）。
+            is Intent.Reset -> {
+                resetCanvas()
+                return
+            }
             is Intent.BeginErase -> {
                 // 新一轮擦除手势：清空待批量 op（防御残留），进入收集模式。
                 // reducer 的 BeginErase 只清 dirty flag，不产生元素变化。
@@ -101,6 +119,7 @@ class DrawBoxHost(
             else -> {}
         }
         val before = elementsById()
+        val beforeBg = state.bgColor
         state = reducer.reduce(state, intent)
         val after = elementsById()
         if (intent is Intent.InsertText) {
@@ -108,6 +127,11 @@ class DrawBoxHost(
             if (newId != null) onTextEditRequested(newId)
         }
         val ops = dispatchLocalOps(before, after)
+        // 背景色属于画布内容（快照持久化），必须随协作同步；逆 = 变更前的背景色。
+        if (intent is Intent.SetBgColor && beforeBg != state.bgColor) {
+            ops += DrawOp.CanvasMetaOp(state.bgColor.toHexString()) to
+                DrawOp.CanvasMetaOp(beforeBg.toHexString())
+        }
         when (intent) {
             is Intent.EraseAt -> {
                 if (inEraseSession) eraseSessionOps.addAll(ops)
@@ -130,7 +154,10 @@ class DrawBoxHost(
      * remove → 恢复被删元素。reducer 已先行改 state，engine 无法从当前 state 反推
      * 旧值，故逆必须在 diff 时捕获。
      */
-    private fun dispatchLocalOps(before: Map<String, Element>, after: Map<String, Element>): List<Pair<DrawOp, DrawOp?>> {
+    private fun dispatchLocalOps(
+        before: Map<String, Element>,
+        after: Map<String, Element>,
+    ): ArrayList<Pair<DrawOp, DrawOp?>> {
         val ops = ArrayList<Pair<DrawOp, DrawOp?>>()
         for ((id, el) in after) {
             val prev = before[id]
@@ -164,6 +191,103 @@ class DrawBoxHost(
     fun canUndo(): Boolean = engine?.canUndo() ?: false
     fun canRedo(): Boolean = engine?.canRedo() ?: false
 
+    // ================================================================ 画布级操作
+    /**
+     * 清空画布：把当前全部元素作为一批移除 op 提交（同步 + 单条撤销）。
+     * 保留背景色 / 工具样式 / 当前模式——与 reducer `Reset` 重置一切的语义不同。
+     */
+    fun resetCanvas() {
+        val current = state.elements
+        if (current.isEmpty()) return
+        val pairs = current.map { el ->
+            DrawOp.ElementRemove(el.id) to (DrawOp.ElementUpsert(el.toWire()) as DrawOp?)
+        }
+        engine?.applyLocalBatch(pairs)
+    }
+
+    /**
+     * 复制选中元素：新 id + 偏移 (12,12)×N，保留全部属性；复制后选中副本。
+     * 经 AddElement 意图走 reducer + diff 广播（同步 op = upsert，逆 = remove），
+     * 不需要扩展线协议。返回复制数量。
+     */
+    @OptIn(ExperimentalUuidApi::class)
+    fun duplicateSelected(): Int {
+        val sel = state.selectedIds
+        if (sel.isEmpty()) return 0
+        val originals = state.elements.filter { it.id in sel }
+        if (originals.isEmpty()) return 0
+        val copies = originals.mapIndexed { i, el ->
+            duplicateElement(el, 12f * (i + 1), 12f * (i + 1))
+        }
+        for (copy in copies) onLocalIntent(Intent.AddElement(copy))
+        if (copies.isNotEmpty()) {
+            state = state.copy(selectedIds = copies.map { it.id }.toSet())
+        }
+        return copies.size
+    }
+
+    @OptIn(ExperimentalUuidApi::class)
+    private fun duplicateElement(el: Element, dx: Float, dy: Float): Element {
+        val id = Uuid.random().toString()
+        val now = nowEpochMillis()
+        return when (el) {
+            is Element.Path -> el.copy(
+                id = id,
+                samples = el.samples.map { it.copy(position = it.position + Offset(dx, dy)) },
+                createdAt = now,
+                modifiedAt = now,
+            )
+            is Element.Shape -> el.copy(
+                id = id,
+                points = el.points.map { it + Offset(dx, dy) },
+                createdAt = now,
+                modifiedAt = now,
+            )
+            is Element.Image -> el.copy(
+                id = id,
+                points = el.points.map { it + Offset(dx, dy) },
+                createdAt = now,
+                modifiedAt = now,
+            )
+            is Element.Text -> el.copy(
+                id = id,
+                topLeft = el.topLeft + Offset(dx, dy),
+                createdAt = now,
+                modifiedAt = now,
+            )
+        }
+    }
+
+    /**
+     * 修改单个文本元素样式（字号/对齐/字体）。经 UpdateElement 意图 diff 广播
+     * （无快照，但宿主显式逆保证 undo 正确），文本对话框提交时调用。
+     */
+    fun applyTextStyle(
+        id: String,
+        fontSize: Float,
+        alignment: TextAlignment,
+        fontFamilyKey: String,
+    ) {
+        val el = state.elements.firstOrNull { it.id == id } as? Element.Text ?: return
+        if (el.fontSize == fontSize && el.alignment == alignment && el.fontFamilyKey == fontFamilyKey) return
+        onLocalIntent(
+            Intent.UpdateElement(
+                el.copy(
+                    fontSize = fontSize,
+                    alignment = alignment,
+                    fontFamilyKey = fontFamilyKey,
+                    modifiedAt = nowEpochMillis(),
+                ),
+            ),
+        )
+    }
+
+    /** 直接设置视口（本地会话状态，不同步、不进撤销历史） */
+    fun setViewport(viewport: Viewport) {
+        if (state.viewport == viewport) return
+        state = state.copy(viewport = viewport)
+    }
+
     // ================================================================ SyncDocument<DrawOp>
     override fun canApply(op: DrawOp): Boolean = true
 
@@ -176,6 +300,8 @@ class DrawBoxHost(
             else DrawOp.ElementRemove(op.element.id)
         }
         is DrawOp.ElementRemove -> elementById(op.elementId)?.let { DrawOp.ElementUpsert(it.toWire()) }
+        // 背景色逆 = 当前背景色（apply 前的旧值由宿主在 diff 时显式提供，兜底用当前值）
+        is DrawOp.CanvasMetaOp -> DrawOp.CanvasMetaOp(state.bgColor.toHexString())
         else -> null
     }
 
@@ -184,6 +310,7 @@ class DrawBoxHost(
         is DrawOp.ElementRemove -> applyRemove(op.elementId)
         is DrawOp.ImageChunkOp -> applyImageChunk(op)
         is DrawOp.ImageReadyOp -> applyImageReady(op)
+        is DrawOp.CanvasMetaOp -> applyCanvasMeta(op)
     }
 
     override fun opElementKey(op: DrawOp): String? = when (op) {
@@ -212,6 +339,20 @@ class DrawBoxHost(
             elements = state.elements.filterNot { it.id == id },
             selectedIds = state.selectedIds - id,
         )
+        return true
+    }
+
+    /** 远程/撤销应用背景色（hex → Color，解析失败视为无操作） */
+    private fun applyCanvasMeta(op: DrawOp.CanvasMetaOp): Boolean {
+        val hex = op.bgColor
+        // 严格校验 "#RRGGBBAA" 格式：toColor 对非 8 位 hex 会兜底返回黑色，
+        // 若放行会把合法画布背景误改成黑。非法输入直接忽略。
+        if (hex.length != 9 || !hex.startsWith("#") ||
+            hex.substring(1).any { it !in "0123456789abcdefABCDEF" }
+        ) return false
+        val color = runCatching { hex.toColor() }.getOrNull() ?: return false
+        if (state.bgColor == color) return false
+        state = state.copy(bgColor = color)
         return true
     }
 

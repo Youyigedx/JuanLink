@@ -26,13 +26,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.juanlink.composeui.draw.DrawingSnapshot
+import com.juanlink.composeui.draw.fitViewport
 import com.juanlink.composeui.platform.formatTimestamp
 import com.juanlink.composeui.theme.Palette
 import io.ak1.drawbox.DrawBox
 import io.ak1.drawbox.DrawingPreview
 import io.ak1.drawbox.domain.model.Element
 import io.ak1.drawbox.domain.model.Viewport
-import io.ak1.drawbox.domain.model.bounds
 
 /** 自动快照间隔预设（秒），0 = 关闭 */
 val AUTO_INTERVAL_PRESETS = listOf(0 to "关闭", 30 to "30秒", 60 to "1分", 120 to "2分", 300 to "5分")
@@ -148,30 +148,6 @@ private fun rememberThumbViewport(elements: List<Element>): Viewport {
     val boxW = with(androidx.compose.ui.platform.LocalDensity.current) { THUMB_WIDTH.toPx() }
     val boxH = with(androidx.compose.ui.platform.LocalDensity.current) { THUMB_HEIGHT.toPx() }
     return androidx.compose.runtime.remember(elements) { fitViewport(elements, boxW, boxH) }
-}
-
-private fun fitViewport(elements: List<Element>, boxW: Float, boxH: Float): Viewport {
-    var left = Float.MAX_VALUE
-    var top = Float.MAX_VALUE
-    var right = Float.MIN_VALUE
-    var bottom = Float.MIN_VALUE
-    var any = false
-    for (el in elements) {
-        val bb = runCatching { el.bounds() }.getOrNull() ?: continue
-        left = minOf(left, bb.left); top = minOf(top, bb.top)
-        right = maxOf(right, bb.right); bottom = maxOf(bottom, bb.bottom)
-        any = true
-    }
-    if (!any || right <= left || bottom <= top) return Viewport()
-    val w = (right - left).coerceAtLeast(1f)
-    val h = (bottom - top).coerceAtLeast(1f)
-    val scale = minOf(boxW / w, boxH / h, 1f).coerceAtLeast(0.01f)
-    val cx = (left + right) / 2f
-    val cy = (top + bottom) / 2f
-    return Viewport(
-        offset = Offset(boxW / 2f - cx * scale, boxH / 2f - cy * scale),
-        scale = scale,
-    )
 }
 
 @Composable

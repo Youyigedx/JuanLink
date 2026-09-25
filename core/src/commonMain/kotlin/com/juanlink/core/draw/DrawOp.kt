@@ -42,6 +42,18 @@ sealed interface DrawOp {
         val imageId: String,
         val checksum: ByteArray,
     ) : DrawOp
+
+    /**
+     * 画布元数据变更（当前：背景色）。背景色属于画布内容（快照会持久化），
+     * 必须随协作同步，否则两端画布外观分叉。
+     *
+     * [bgColor] 为 hex 字符串（与 WireElement 颜色约定一致，如 "#FFFFFFFF"）。
+     * 逆操作 = 携带旧背景色的同类型 op（由宿主在 diff 时捕获）。
+     */
+    @Serializable
+    data class CanvasMetaOp(
+        val bgColor: String,
+    ) : DrawOp
 }
 
 /**
@@ -115,4 +127,5 @@ fun drawOpTypeCode(op: DrawOp): Int = when (op) {
     is DrawOp.ElementRemove -> OpType.ElementRemove.code
     is DrawOp.ImageChunkOp -> OpType.ImageChunk.code
     is DrawOp.ImageReadyOp -> OpType.ImageReady.code
+    is DrawOp.CanvasMetaOp -> OpType.CanvasMeta.code
 }

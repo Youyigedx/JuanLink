@@ -7,13 +7,16 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.math.roundToInt
 import kotlinx.serialization.json.Json
 
 fun Color.toHexString(): String {
-    val r = (red * 255).toInt().toString(16).padStart(2, '0')
-    val g = (green * 255).toInt().toString(16).padStart(2, '0')
-    val b = (blue * 255).toInt().toString(16).padStart(2, '0')
-    val a = (alpha * 255).toInt().toString(16).padStart(2, '0')
+    // roundToInt 而非 toInt：192/255f 等浮点除法存在低位数误差，截断会让
+    // 8 位颜色往返漂移 1 级（#FFC0392B → #FFBF392B），跨端同步出现色差。
+    val r = (red * 255).roundToInt().toString(16).padStart(2, '0')
+    val g = (green * 255).roundToInt().toString(16).padStart(2, '0')
+    val b = (blue * 255).roundToInt().toString(16).padStart(2, '0')
+    val a = (alpha * 255).roundToInt().toString(16).padStart(2, '0')
     return "#$r$g$b$a"
 }
 

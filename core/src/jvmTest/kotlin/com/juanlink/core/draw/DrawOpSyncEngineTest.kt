@@ -229,6 +229,18 @@ class DrawOpSyncEngineTest {
         assertFalse(engine.canUndo())
     }
 
+    @Test
+    fun canvasMetaOpCodecRoundTrip() {
+        val op = DrawOp.CanvasMetaOp("#FF2F6F5E")
+        val decoded = DrawOpCodec.decode(DrawOpCodec.encode(op))
+        assertEquals(op, decoded, "CanvasMetaOp 应可 CBOR 编解码往返")
+    }
+
+    @Test
+    fun canvasMetaOpTypeCodeIsCanvasMeta() {
+        assertEquals(OpType.CanvasMeta.code, drawOpTypeCode(DrawOp.CanvasMetaOp("#FFFFFFFF")))
+    }
+
     /**
      * 并发修复验证：UI 线程（applyLocal 画线）与网络线程（onAck 清出站窗口）
      * 同时操作共享状态，不得抛 ConcurrentModificationException/状态撕裂。

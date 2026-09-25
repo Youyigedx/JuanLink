@@ -52,6 +52,28 @@ doc.allStrokes(); doc.allImages(); doc.layers
 doc.imageBytes(imageId): ByteArray?
 doc.onChange = { }                         // 状态变更通知
 ```
+（注：上述 CanvasDocument/CanvasOp 为旧自研模型；现实现以 DrawBoxHost 为宿主、
+DrawOp（元素 upsert/remove、图片分块、CanvasMeta）为线协议 op——见 data-structures.md。）
+
+## 4b. 画布宿主增强 API（DrawBoxHost，重构新增）
+
+```kotlin
+host.resetCanvas()                          // 清空：批量移除同步 + 单条撤销，保留背景/样式/模式
+host.duplicateSelected(): Int               // 复制选中（新 id + 偏移，diff 广播，选中副本）
+host.applyTextStyle(id, fontSize, alignment, fontFamily)  // 文本样式同步（编辑对话框提交用）
+host.setViewport(viewport)                  // 本地相机直写（不同步、不进撤销）
+
+// 背景色属画布内容，随协作同步（DrawOp.CanvasMetaOp）：
+app.host.onLocalIntent(Intent.SetBgColor(color))   // 本地改 → diff 广播；远端 apply 同步
+```
+
+上下文 UI（新增）：
+
+```kotlin
+ContextStyleBar(host)                       // 随工具/选中态切换：选中样式编辑、形状默认、橡皮大小、背景
+ZoomControls(...)                           // 画布右下角：缩小/放大/适应/100%/网格（DrawBoxCanvas 内置）
+TextEditOverlay(..., onCommit = { text, fontSize, alignment, fontFamily -> ... })  // 文本样式随提交同步
+```
 
 ## 5. 加密
 

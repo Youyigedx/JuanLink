@@ -35,6 +35,7 @@ import com.juanlink.composeui.AppState
 import com.juanlink.composeui.theme.JuanTheme
 import com.juanlink.composeui.theme.Palette
 import com.juanlink.composeui.ui.ConnectionPanel
+import com.juanlink.composeui.ui.ContextStyleBar
 import com.juanlink.composeui.ui.DrawBoxCanvas
 import com.juanlink.composeui.ui.FloatingToolBar
 import com.juanlink.composeui.ui.HistoryPanel
@@ -66,10 +67,12 @@ fun AndroidRoot(app: AppState) {
 
     JuanTheme {
         Box(Modifier.fillMaxSize()) {
-            // 无限画布（DrawBox：缩放/平移/双指捏合内置）
+            // 无限画布（DrawBox：缩放/平移/双指捏合内置；右下角缩放控制簇）
             DrawBoxCanvas(
                 host = app.host,
                 modifier = Modifier.fillMaxSize(),
+                showGrid = app.showGrid,
+                onToggleGrid = { app.toggleGrid() },
             )
 
             // 顶部操作栏（statusBarsPadding 避开系统状态栏，防止按钮被遮挡/无法点击）
@@ -120,6 +123,11 @@ fun AndroidRoot(app: AppState) {
                     onRedo = { app.redo() },
                     canUndo = app.canUndo,
                     canRedo = app.canRedo,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                // 上下文样式栏（随工具/选中态切换）
+                ContextStyleBar(
+                    host = app.host,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 // 状态条
@@ -216,7 +224,12 @@ fun AndroidRoot(app: AppState) {
                 TextEditOverlay(
                     title = "编辑文字",
                     initialText = app.textDraft,
-                    onCommit = { app.commitTextEdit(it) },
+                    initialFontSize = app.textFontSize,
+                    initialAlignment = app.textAlignment,
+                    initialFontFamily = app.textFontFamily,
+                    onCommit = { text, fontSize, alignment, fontFamily ->
+                        app.commitTextEdit(text, fontSize, alignment, fontFamily)
+                    },
                     onDismiss = { app.dismissTextEdit() },
                 )
             }

@@ -25,19 +25,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.juanlink.composeui.draw.DrawBoxHost
+import com.juanlink.composeui.theme.INK_COLORS
 import com.juanlink.composeui.theme.Palette
 import io.ak1.drawbox.domain.model.Intent
 import io.ak1.drawbox.domain.model.Mode
-
-/** 中式色板（渲染为可点击色块） */
-private val INK_COLORS = listOf(
-    Color(0xFF1A1A1A),  // 墨黑
-    Color(0xFF2F6F5E),  // 竹青
-    Color(0xFFC0392B),  // 朱砂红
-    Color(0xFF7A4E2D),  // 赭石
-    Color(0xFF3D5A80),  // 黛蓝
-    Color(0xFF9C6B30),  // 赭黄
-)
 
 /** 工具映射：标签 → DrawBox Mode（手形/选择/画笔/图形/文字/橡皮） */
 private val TOOLS = listOf(

@@ -32,6 +32,7 @@ import com.juanlink.composeui.platform.TurnConfigIo
 import com.juanlink.composeui.theme.JuanTheme
 import com.juanlink.composeui.theme.Palette
 import com.juanlink.composeui.ui.ConnectionPanel
+import com.juanlink.composeui.ui.ContextStyleBar
 import com.juanlink.composeui.ui.DrawBoxCanvas
 import com.juanlink.composeui.ui.FloatingToolBar
 import com.juanlink.composeui.ui.HistoryPanel
@@ -114,24 +115,13 @@ fun AppRoot() {
     }
     JuanTheme {
         Box(Modifier.fillMaxSize()) {
-            // 无限画布（DrawBox：缩放/平移/触控内置）
+            // 无限画布（DrawBox：缩放/平移/触控内置；右下角缩放控制簇）
             DrawBoxCanvas(
                 host = app.host,
                 modifier = Modifier.fillMaxSize(),
+                showGrid = app.showGrid,
+                onToggleGrid = { app.toggleGrid() },
             )
-
-            // 历史记录面板（工具栏下方左侧）
-            if (app.showHistory) {
-                HistoryPanel(
-                    snapshots = app.snapshots,
-                    autoIntervalSec = app.autoIntervalSec,
-                    onAutoIntervalChange = { app.setAutoInterval(it) },
-                    onManualCapture = { app.captureSnapshot() },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(top = 112.dp, start = 12.dp),
-                )
-            }
 
             // 顶部栏
             Row(
@@ -151,18 +141,31 @@ fun AppRoot() {
                 TopButton("设置") { app.showSettings = !app.showSettings }
             }
 
-            // 悬浮工具栏（限宽 + 水平滚动，任意窗口尺寸不重叠）
-            FloatingToolBar(
-                host = app.host,
-                onUndo = { app.undo() },
-                onRedo = { app.redo() },
-                canUndo = app.canUndo,
-                canRedo = app.canRedo,
+            // 悬浮工具栏 + 上下文样式栏 + 历史面板（同一列，任意窗口尺寸不重叠）
+            Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(top = 56.dp, start = 12.dp)
-                    .widthIn(max = 780.dp),
-            )
+                    .widthIn(max = 820.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FloatingToolBar(
+                    host = app.host,
+                    onUndo = { app.undo() },
+                    onRedo = { app.redo() },
+                    canUndo = app.canUndo,
+                    canRedo = app.canRedo,
+                )
+                ContextStyleBar(host = app.host)
+                if (app.showHistory) {
+                    HistoryPanel(
+                        snapshots = app.snapshots,
+                        autoIntervalSec = app.autoIntervalSec,
+                        onAutoIntervalChange = { app.setAutoInterval(it) },
+                        onManualCapture = { app.captureSnapshot() },
+                    )
+                }
+            }
 
             // 底部状态栏
             Box(
@@ -288,7 +291,12 @@ fun AppRoot() {
                 TextEditOverlay(
                     title = "编辑文字",
                     initialText = app.textDraft,
-                    onCommit = { app.commitTextEdit(it) },
+                    initialFontSize = app.textFontSize,
+                    initialAlignment = app.textAlignment,
+                    initialFontFamily = app.textFontFamily,
+                    onCommit = { text, fontSize, alignment, fontFamily ->
+                        app.commitTextEdit(text, fontSize, alignment, fontFamily)
+                    },
                     onDismiss = { app.dismissTextEdit() },
                 )
             }
