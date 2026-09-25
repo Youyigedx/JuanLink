@@ -32,16 +32,24 @@
   <path d="M 336 110 v 16" stroke="#e6edf3" stroke-width="3" stroke-linecap="round"/>
   <path d="M 336 118 l 26 0 M 336 118 l -26 0" stroke="#e6edf3" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
 
-  <!-- 右区：品牌 -->
+  <!-- 右区：品牌 + 中式色板 -->
   <text x="500" y="128" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
         font-size="64" font-weight="700" letter-spacing="1" fill="#e6edf3">Juan LinK</text>
 
   <rect x="506" y="152" width="120" height="4" rx="2" fill="url(#strokeBlue)"/>
 
-  <text x="500" y="204" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+  <text x="500" y="202" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
         font-size="24" fill="#b1bac4">跨平台 P2P 协作绘图</text>
-  <text x="500" y="238" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="17" fill="#8b949e">Cross-platform collaborative drawing · no account, no central server</text>
-  <text x="500" y="266" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+
+  <!-- 中式色板：墨黑 / 竹青 / 朱砂红 / 黛蓝 / 赭黄 -->
+  <circle cx="500" cy="236" r="8" fill="#1A1A1A" stroke="#8b949e" stroke-opacity="0.5" stroke-width="1"/>
+  <circle cx="526" cy="236" r="8" fill="#2F6F5E"/>
+  <circle cx="552" cy="236" r="8" fill="#C0392B"/>
+  <circle cx="578" cy="236" r="8" fill="#3D5A80"/>
+  <circle cx="604" cy="236" r="8" fill="#9C6B30"/>
+
+  <text x="500" y="262" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="17" fill="#8b949e">扫码即连 · 无需账号 · 画完即散</text>
+  <text x="500" y="288" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
         font-size="14" fill="#57606a">Kotlin Multiplatform · Compose Multiplatform · E2E encrypted</text>
 </svg>

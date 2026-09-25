@@ -1,73 +1,89 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Youyigedx/juan-link/main/assets/banner.svg" alt="Juan LinK — 跨平台 P2P 协作绘图" width="100%">
+  <img src="https://raw.githubusercontent.com/Youyigedx/JuanLink/main/assets/banner.svg" alt="Juan LinK" width="100%">
 </p>
 
 # Juan LinK
 
-跨平台 **点对点（P2P）协作绘图** 应用，基于 Kotlin Multiplatform + Compose Multiplatform 构建。
+两台设备，一个二维码，打开就是同一张画布。
 
-两台设备通过二维码配对，**无需账号、无需中心服务器**即可实时同步画笔与橡皮。同网段走局域网 TCP 直连；跨网络（对称 NAT / 蜂窝 CGNAT）经可配置的 **TURN 中继**兜底。所有同步帧经 X25519 + AES-256-GCM 端到端加密。
+Juan LinK 是一个 P2P 协作画板：一端点「创建协作」，另一端扫码加入，两台设备立刻共享一块无限画布。没有账号，没有中心服务器，画的东西只在参与者之间传输——关掉连接，这次协作就散场，谁也不留底。
 
-## 简介
+名字取意「婵娟」：千里共婵娟，两端共享一张画。应用内是中式色板（宣纸白、墨黑、竹青、朱砂红），画的是笔迹，不是 SaaS。
 
-Juan LinK 定位"打开即画"的极简协作画板：一端创建协作、生成二维码，另一端扫码即加入同一块画布。不设账号体系、不建云同步中心，连接通道全部建立在两端设备之间，你的画稿只在参与者之间传输。
+## 上手（约 30 秒）
 
-## 能力一览
+1. 同一 Wi-Fi 下的两台设备（或一台电脑开两个实例）都可以。
+2. A 点「**创建协作**」→ 出现二维码和配对码（如 `5689-ABCD`）。
+3. B 点「**加入协作**」，扫码或粘贴连接串 → 握手 → 同一张画布，画笔实时同步。
 
-| 能力 | 说明 |
-|---|---|
-| 实时笔画同步 | Lamport 时钟全序合并，双端状态一致 |
-| 全工具绘画 | 画笔 / 直线 / 矩形 / 圆形 / 三角形 / 箭头 / 文字 / 橡皮，双端同步 |
-| 画布操控 | 缩放 / 平移 / 图层前移后移 / 撤销重做 |
-| 二维码配对 | 扫码即连，或复制配对码加入 |
-| 断线保护 | 自动重连 + 断线期间操作补同步，连接永不会自动被关闭（可手动断开） |
-| 跨网兜底 | TURN 中继穿透对称 NAT；协作前引导配置 TURN（可跳过，仅局域网直连） |
-| 端到端加密 | X25519 密钥交换 + AES-256-GCM 加密帧，密钥不经任何第三方 |
-| 历史快照 | 手动 / 定时快照画布，侧栏回顾每一版 |
+两端不在同一网络（比如一边走手机流量）时，需要配一台 TURN 中继，应用内有配置引导；不配就只走局域网直连。
 
-## 平台支持
+## 能画什么
 
-| 平台 | 状态 |
-|---|---|
-| Windows / macOS / Linux（桌面） | 可用 |
-| Android | 可用（含 CameraX 扫码加入） |
-| iOS | 工程骨架占位，UI 层未实现 |
+- **工具**：画笔 / 直线 / 矩形 / 圆形 / 三角形 / 箭头 / 文字 / 橡皮，双端实时同步
+- **形状样式**：描边（实线 / 虚线 / 点线）、填充色、描边开关、圆角，画之前可预设，画完可选中再改
+- **选中编辑**：改色、复制一份、删除、前移 / 后移；撤销 / 重做跨端一致
+- **文字**：内容、字号、对齐、字体（默认 / 衬线 / 等宽）随提交同步
+- **图片**：导入即按 16KB 分块加密同步，缺块自动补传
+- **画布**：背景色随协作同步；右下角缩放按钮（缩小 / 放大 / 适应 / 100%）和辅助网格开关
+- **历史**：手动或定时快照，侧栏回看每一版
 
-## 架构
+## 现在能用 / 还不能用的
+
+能用：
+
+- Windows / macOS / Linux 桌面
+- Android（含摄像头扫码加入）
+
+别抱期待：
+
+- **iOS 只有工程骨架，UI 没做**
+- 图片的缩放 / 旋转只有选中手柄，没有专门的工具
+- 没有真正的图层面板，只有前移 / 后移
+- 8 小时长稳压测方案写好了，还没实跑
+
+## 设计上为什么这么做
+
+**只同步操作，不同步画布。** 每一笔、每一条线都是增量操作，按 Lamport 时钟全序合并后广播；断线重连按序号补同步。整张画布只在两端各自重建，从不搬来搬去。
+
+**端到端加密。** 每次协作握手用 X25519 协商一次性会话密钥，之后所有操作帧走 AES-256-GCM。密钥只在两端内存里；二维码只装公钥，泄露了最多只能发起一个临时会话。
+
+**连接永不自动关闭。** 断线自动重连，断线期间本端照常画，恢复后自动补发。想结束只能手动点「断开连接」。
+
+**加密通道只在两端之间。** 局域网直连时没有第三方参与；跨网时数据经你配置的 TURN 服务器——它只转发密文，看不到内容。
+
+## 技术速览
+
+- 语言 / 框架：Kotlin Multiplatform + Compose Multiplatform
+- 模块：`:core`（协议 / 加密 / 同步 / 传输，零 UI）· `:composeUi`（共享 UI）· `:desktop` · `:androidApp`
+- 画布渲染：[DrawBox](https://github.com/ak1/design-oop)（Compose Multiplatform 矢量绘图引擎），桌面与安卓共用
+- 传输：局域网 TCP 直连，失败后 TURN 中继兜底；可靠有序 UDP（分片 / ACK / 重传）作中继数据面
+- 同步：操作级 `OpSyncEngine`——seq 连续前沿 + Lamport 全序 + applyLog 补同步
 
 ```
-:core        纯内核（协议 / 加密 / 同步引擎 / 传输），零 UI 依赖
+:core        纯内核（协议 / 加密 / 同步引擎 / 传输）
 :composeUi   共享 Compose UI（画布 / 工具栏 / 面板 / 连接）
 :desktop     JVM 桌面壳（启动入口 + 平台 IO）
 :androidApp  Android 客户端（CameraX 扫码 + 完整实现）
 ```
 
-画布渲染接入 [DrawBox](https://github.com/ak1/design-oop)（Compose Multiplatform 矢量绘图引擎），统一桌面与安卓的绘画体验；历史缩略图复用其原生渲染器。
+## 构建
 
-**传输栈**（`:core` `jvmAndAndroidMain`）：
+依赖 JDK 21；构建安卓端另需 Android SDK。
 
+```bash
+./gradlew :core:jvmTest                 # 核心测试
+./gradlew :desktop:createDistributable  # 桌面端可执行
+./gradlew :androidApp:assembleDebug     # 安卓 Debug APK
 ```
-上层:  OpSyncEngine（操作级同步） → SessionManager（握手 / 加密帧） → EncryptedFrame
-中间:  ReliableDatagramSession（可靠有序 UDP：分片 + ACK + 重传） ← 中继数据面复用
-底层:  TcpTransport（局域网直连） | TurnTransport（TURN 中继，UDP 数据报）
-汇聚:  CompositeTransport（先 TCP，失败后 relay 兜底）
-```
 
-源集结构：`commonMain`（跨平台） + `jvmAndAndroidMain`（JVM / Android 共享中间层） + `jvmMain` / `androidMain`（平台实现）。
+Android 模块在检测到 `local.properties`（含 `sdk.dir`）或 `ANDROID_HOME` 时才加入构建。release 签名密码不入源码：构建时设置环境变量 `JUANLINK_STORE_PASSWORD` / `JUANLINK_KEY_PASSWORD`，密钥库 `androidApp/release.jks` 已被 `.gitignore` 忽略。
 
-## 安全设计
+## TURN 配置（只有跨网才需要）
 
-- 每一次协作会话握手时经 X25519 协商出一次性会话密钥，密钥仅在两端内存中存在。
-- 所有操作帧以 AES-256-GCM 加密传输，携带随机 nonce 与认证标签，防止窃听与篡改。
-- 不依赖中心服务器鉴权：二维码即会话载体，扫码方持有配对信息即可安全地接入本会话。
+默认只带一台公共测试服务器兜底（凭据公开，通常不可用）。跨网连接请配置自己的服务器（如 coturn 或付费 TURN），否则只能局域网直连。
 
-## TURN 中继配置
-
-默认仅携带**公共测试服务器**作 fallback（凭据公开、通常不可用）。跨网络连接需配置自己的 TURN 服务器（如自部署 coturn 或付费 TURN 服务），否则只能局域网直连。
-
-首次启动未配置 TURN 时会弹出**配置引导**（可关闭，先本地画画）；未配置就点击"创建/加入协作"会弹出**强制引导**——只能保存至少一台服务器，或选择"跳过（仅局域网直连）"。
-
-1. 桌面端：应用设置面板添加，或编辑 `~/.juanlink/turn.json`（JSON 数组，可按需多台）：
+桌面端：设置面板添加，或编辑 `~/.juanlink/turn.json`（JSON 数组，可多台）：
 
 ```json
 [
@@ -75,38 +91,15 @@ Juan LinK 定位"打开即画"的极简协作画板：一端创建协作、生�
 ]
 ```
 
-2. 安卓端：设置面板添加同一台服务器（两端须配置相同服务器）。
-3. 跨网连接时，Initiator 会优先尝试自定义服务器，成功者连同中继地址写进二维码，Responder 据此连同一台。
-
-## 构建
-
-```bash
-# 依赖：JDK 21，Android SDK（若构建安卓端）
-./gradlew :core:jvmTest                 # 运行核心测试
-./gradlew :desktop:createDistributable  # 桌面端可执行
-./gradlew :androidApp:assembleDebug     # 安卓 Debug APK
-```
-
-Android 模块条件启用：存在 `local.properties`（含 `sdk.dir`）或 `ANDROID_HOME` 环境变量时才加入构建。
-
-### Android release 签名
-
-签名密码不入源码，release 构建需设置环境变量：
-
-```bash
-export JUANLINK_STORE_PASSWORD=...
-export JUANLINK_KEY_PASSWORD=...
-```
-
-`androidApp/release.jks`（签名密钥库）已被 `.gitignore` 忽略，不随仓库分发。
+安卓端：设置面板添加**同一台**（两端必须一致）。跨网连接时发起方优先尝试自定义服务器，成功的中继地址连同二维码一起交给扫码方。
 
 ## 文档
 
-- [通信协议设计](docs/protocol.md) — P2P 帧格式、加密方案、NAT 穿越
-- [数据结构](docs/data-structures.md) — Stroke / Layer / CanvasDocument 模型
-- [API 设计](docs/api.md) — SessionManager / OpSyncEngine 等公开接口
-- [压测方案](docs/stress-test.md) — 长稳压测场景与指标
-- [用户手册](docs/user-guide.md) — 协作 / 绘画 / 图片操作说明
+- [通信协议](docs/protocol.md) — 帧格式、加密方案、NAT 穿越
+- [数据结构](docs/data-structures.md) — 元素模型与操作编码
+- [API 设计](docs/api.md) — 会话 / 同步 / 画布公开接口
+- [用户手册](docs/user-guide.md) — 协作 / 绘画 / 图片操作
+- [压测方案](docs/stress-test.md) — 8h 长稳场景与指标
 
 ## License
 
