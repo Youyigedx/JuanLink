@@ -11,8 +11,8 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-2F6F5E)
 ![Language: Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF?logo=kotlin&logoColor=white)
 ![UI: Compose Multiplatform](https://img.shields.io/badge/UI-Compose%20Multiplatform-3D5A80)
-![Platform: Desktop + Android](https://img.shields.io/badge/Platform-Desktop%20%2B%20Android-1A1A1A)
-![Encryption: E2E](https://img.shields.io/badge/Encryption-End-to--End-C0392B)
+![Platform: Desktop + Android](https://img.shields.io/static/v1?label=Platform&message=Desktop%20%2B%20Android&color=1A1A1A)
+![Encryption: E2E](https://img.shields.io/static/v1?label=Encryption&message=End-to-End&color=C0392B)
 
 </div>
 
