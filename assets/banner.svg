@@ -18,14 +18,22 @@
   <rect width="1200" height="320" fill="#F7F3E9"/>
   <rect width="1200" height="320" filter="url(#grain)"/>
 
-  <!-- ================= 左区：品牌 ================= -->
-  <!-- 印章 -->
-  <g transform="rotate(-5 78 70)">
-    <rect x="62" y="54" width="32" height="32" rx="4" fill="#C0392B"/>
-    <text x="78" y="77" text-anchor="middle" font-family="'Songti SC', 'SimSun', serif"
-          font-size="19" fill="#F7F3E9">婵</text>
-  </g>
+  <!-- 月下淡墨远山（毛笔笔触，贯穿全宽；左密右疏、峰谷错开，参考水墨山水） -->
+  <path d="M 20 224 C 56 184 76 172 104 186 C 132 200 156 160 180 142 C 204 124 232 156 260 176 C 288 196 312 166 336 148 C 360 130 388 162 416 182 C 444 202 468 172 492 154 C 516 136 544 168 572 188 C 600 208 628 180 656 164 C 684 148 712 176 740 194 C 768 212 792 188 816 172 C 840 156 868 180 892 196 C 912 210 932 202 952 208 C 972 214 992 206 1012 202 C 1032 198 1056 206 1080 214 C 1104 222 1128 212 1140 216"
+        fill="none" stroke="#1A1A1A" stroke-opacity="0.06" stroke-width="16" stroke-linecap="round"/>
+  <path d="M 20 230 C 80 198 104 196 132 208 C 160 220 184 186 208 170 C 232 154 260 182 288 200 C 316 218 340 190 364 174 C 388 158 416 186 444 202 C 472 218 496 190 520 174 C 544 158 572 186 600 202 C 628 218 652 194 676 182 C 700 170 728 192 756 206 C 784 220 808 198 832 186 C 856 174 884 194 908 204 C 928 214 948 206 968 212 C 988 218 1008 208 1028 202 C 1052 196 1076 206 1100 214 C 1124 222 1136 214 1140 218"
+        fill="none" stroke="#1A1A1A" stroke-opacity="0.09" stroke-width="11" stroke-linecap="round"/>
+  <path d="M 20 236 C 96 208 120 206 148 216 C 176 226 200 202 224 190 C 248 178 276 200 304 212 C 332 224 356 204 380 192 C 404 180 432 202 460 212 C 488 222 512 202 536 190 C 560 178 588 200 616 210 C 644 220 668 202 692 190 C 716 178 744 198 772 208 C 800 218 824 202 848 192 C 872 182 896 202 916 212 C 936 222 956 214 976 208 C 996 202 1020 210 1044 216 C 1068 222 1096 212 1140 218"
+        fill="none" stroke="#1A1A1A" stroke-opacity="0.13" stroke-width="7" stroke-linecap="round"/>
 
+  <!-- ================= 右区：圆月（婵娟） ================= -->
+  <!-- 月晕 -->
+  <circle cx="940" cy="150" r="95" fill="url(#moonGlow)"/>
+
+  <!-- 圆月：宣纸色 + 竹青描边 -->
+  <circle cx="940" cy="150" r="48" fill="#F7F3E9" stroke="#2F6F5E" stroke-opacity="0.4" stroke-width="1.5"/>
+
+  <!-- ================= 左区：品牌 ================= -->
   <!-- 品牌名 -->
   <text x="110" y="116" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
         font-size="58" font-weight="700" letter-spacing="1" fill="#1A1A1A">Juan LinK</text>
@@ -47,72 +55,4 @@
 
   <text x="110" y="272" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
         font-size="12" fill="#9C9387">Kotlin Multiplatform · Compose Multiplatform · E2E encrypted</text>
-
-  <!-- ================= 右区：水墨山月 ================= -->
-  <!-- 月晕 -->
-  <circle cx="680" cy="118" r="86" fill="url(#moonGlow)"/>
-
-  <!-- 圆月：宣纸色 + 竹青描边 + 淡墨山影 -->
-  <circle cx="680" cy="118" r="46" fill="#F7F3E9" stroke="#2F6F5E" stroke-opacity="0.4" stroke-width="1.5"/>
-  <path d="M 634 128 C 650 106 668 100 684 104 C 700 108 716 104 726 120"
-        fill="none" stroke="#1A1A1A" stroke-opacity="0.14" stroke-width="10" stroke-linecap="round"/>
-  <path d="M 638 138 C 656 120 674 116 692 120 C 710 124 724 120 726 134"
-        fill="none" stroke="#1A1A1A" stroke-opacity="0.09" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="726" cy="104" r="2.6" fill="#C0392B"/>
-
-  <!-- 远山（月下淡墨） -->
-  <path d="M 600 196 C 620 168 636 164 652 176 C 668 188 680 178 694 164 C 708 150 722 160 740 176 C 758 192 776 178 792 164"
-        fill="none" stroke="#1A1A1A" stroke-opacity="0.18" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M 636 210 C 656 188 674 184 690 194 C 706 204 724 196 742 184 C 758 174 776 184 796 202"
-        fill="none" stroke="#3D5A80" stroke-opacity="0.10" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-
-  <!-- 两端设备节点 + 虚线链路 -->
-  <circle cx="838" cy="76" r="6" fill="#1A1A1A"/>
-  <circle cx="838" cy="76" r="11" fill="none" stroke="#1A1A1A" stroke-opacity="0.25" stroke-width="1.5"/>
-  <circle cx="1012" cy="168" r="6" fill="#2F6F5E"/>
-  <circle cx="1012" cy="168" r="11" fill="none" stroke="#2F6F5E" stroke-opacity="0.3" stroke-width="1.5"/>
-  <path d="M 852 76 C 920 48 968 108 998 160"
-        fill="none" stroke="#6B6258" stroke-width="2" stroke-dasharray="5 9" stroke-linecap="round" opacity="0.6"/>
-  <!-- 数据包流动 -->
-  <circle cx="906" cy="72" r="3" fill="#C0392B"/>
-  <circle cx="958" cy="122" r="3" fill="#2F6F5E"/>
-
-  <!-- 水墨一笔画（主笔墨黑 + 辅笔竹青 + 点缀朱砂） -->
-  <path d="M 330 262 C 470 236 540 168 640 132 C 740 96 830 128 940 200 C 1010 246 1080 244 1130 214"
-        fill="none" stroke="#1A1A1A" stroke-width="22" stroke-linecap="round" opacity="0.88"/>
-  <path d="M 340 244 C 480 216 556 150 656 116 C 748 84 838 118 932 186 C 1002 230 1072 228 1122 198"
-        fill="none" stroke="#2F6F5E" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
-  <path d="M 700 296 C 780 288 844 236 906 176"
-        fill="none" stroke="#C0392B" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
-
-  <!-- 扫码配对（QR 视觉，右下角） -->
-  <g fill="#2F6F5E">
-    <!-- 定位角：左上 -->
-    <rect x="1086" y="206" width="16" height="16"/>
-    <rect x="1090" y="210" width="8" height="8" fill="#F7F3E9"/>
-    <rect x="1092" y="212" width="4" height="4"/>
-    <!-- 定位角：右上 -->
-    <rect x="1114" y="206" width="16" height="16"/>
-    <rect x="1118" y="210" width="8" height="8" fill="#F7F3E9"/>
-    <rect x="1120" y="212" width="4" height="4"/>
-    <!-- 定位角：左下 -->
-    <rect x="1086" y="234" width="16" height="16"/>
-    <rect x="1090" y="238" width="8" height="8" fill="#F7F3E9"/>
-    <rect x="1092" y="240" width="4" height="4"/>
-    <!-- 数据模块 -->
-    <rect x="1106" y="206" width="4" height="4"/>
-    <rect x="1106" y="214" width="4" height="4"/>
-    <rect x="1114" y="214" width="4" height="4"/>
-    <rect x="1106" y="222" width="4" height="4"/>
-    <rect x="1086" y="222" width="4" height="4"/>
-    <rect x="1094" y="222" width="4" height="4"/>
-    <rect x="1114" y="222" width="4" height="4"/>
-    <rect x="1106" y="230" width="4" height="4"/>
-    <rect x="1114" y="230" width="4" height="4"/>
-    <rect x="1106" y="238" width="4" height="4"/>
-    <rect x="1114" y="238" width="4" height="4"/>
-    <rect x="1106" y="246" width="4" height="4"/>
-  </g>
-  <text x="1086" y="274" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="12" fill="#9C9387">扫码即连</text>
 </svg>
