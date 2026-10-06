@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="Juan LinK — 跨平台 P2P 协作绘图">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="Juan LinK — 跨平台 P2P 协作画板">
   <defs>
     <!-- 宣纸纹理（细噪点） -->
     <filter id="grain" x="0" y="0" width="100%" height="100%">
@@ -6,6 +6,12 @@
       <feColorMatrix in="n" type="matrix"
         values="0 0 0 0 0.55  0 0 0 0 0.50  0 0 0 0 0.42  0 0 0 0.05 0"/>
     </filter>
+    <!-- 月晕：径向渐变，中央亮边缘淡 -->
+    <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1A1A1A" stop-opacity="0.10"/>
+      <stop offset="55%" stop-color="#1A1A1A" stop-opacity="0.045"/>
+      <stop offset="100%" stop-color="#1A1A1A" stop-opacity="0"/>
+    </radialGradient>
   </defs>
 
   <!-- 宣纸底 -->
@@ -13,76 +19,100 @@
   <rect width="1200" height="320" filter="url(#grain)"/>
 
   <!-- ================= 左区：品牌 ================= -->
-  <text x="70" y="118" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="60" font-weight="700" letter-spacing="1" fill="#1A1A1A">Juan LinK</text>
-
-  <rect x="74" y="140" width="112" height="4" rx="2" fill="#2F6F5E"/>
-
-  <text x="70" y="182" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="23" fill="#6B6258">跨平台 P2P 协作绘图</text>
-
-  <!-- 中式色板：墨黑 / 竹青 / 朱砂红 / 黛蓝 / 赭黄 -->
-  <circle cx="74" cy="212" r="7" fill="#1A1A1A"/>
-  <circle cx="98" cy="212" r="7" fill="#2F6F5E"/>
-  <circle cx="122" cy="212" r="7" fill="#C0392B"/>
-  <circle cx="146" cy="212" r="7" fill="#3D5A80"/>
-  <circle cx="170" cy="212" r="7" fill="#9C6B30"/>
-
-  <text x="70" y="250" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="17" fill="#6B6258">扫码即连 · 无需账号 · 画完即散</text>
-  <text x="70" y="278" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-        font-size="13" fill="#9C9387">Kotlin Multiplatform · Compose Multiplatform · E2E encrypted</text>
-
-  <!-- ================= 右区：水墨协作画 ================= -->
   <!-- 印章 -->
-  <g transform="rotate(-5 668 72)">
-    <rect x="652" y="56" width="32" height="32" rx="3" fill="#C0392B"/>
-    <text x="668" y="79" text-anchor="middle" font-family="'Songti SC', 'SimSun', serif"
+  <g transform="rotate(-5 78 70)">
+    <rect x="62" y="54" width="32" height="32" rx="4" fill="#C0392B"/>
+    <text x="78" y="77" text-anchor="middle" font-family="'Songti SC', 'SimSun', serif"
           font-size="19" fill="#F7F3E9">婵</text>
   </g>
 
-  <!-- 两端设备节点 + 虚线链路 -->
-  <circle cx="748" cy="92" r="6" fill="#1A1A1A"/>
-  <circle cx="748" cy="92" r="11" fill="none" stroke="#1A1A1A" stroke-opacity="0.25" stroke-width="1.5"/>
-  <circle cx="1072" cy="168" r="6" fill="#2F6F5E"/>
-  <circle cx="1072" cy="168" r="11" fill="none" stroke="#2F6F5E" stroke-opacity="0.3" stroke-width="1.5"/>
-  <path d="M 762 92 C 880 44 980 96 1056 158"
-        fill="none" stroke="#6B6258" stroke-width="2" stroke-dasharray="5 9" stroke-linecap="round" opacity="0.55"/>
+  <!-- 品牌名 -->
+  <text x="110" y="116" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="58" font-weight="700" letter-spacing="1" fill="#1A1A1A">Juan LinK</text>
 
-  <!-- 水墨笔迹（一笔画） -->
-  <path d="M 660 280 C 770 262 830 190 920 118 C 980 70 1060 52 1132 62"
-        fill="none" stroke="#1A1A1A" stroke-width="26" stroke-linecap="round" opacity="0.88"/>
-  <path d="M 640 252 C 730 232 800 168 880 100 C 950 48 1030 40 1100 54"
-        fill="none" stroke="#2F6F5E" stroke-width="7" stroke-linecap="round" opacity="0.75"/>
-  <path d="M 700 296 C 780 288 840 230 910 170"
+  <rect x="114" y="136" width="118" height="4" rx="2" fill="#2F6F5E"/>
+
+  <text x="110" y="172" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="21" fill="#6B6258">跨平台 P2P 协作画板</text>
+
+  <!-- 中式色板：墨黑 / 竹青 / 朱砂红 / 黛蓝 / 赭黄 -->
+  <circle cx="116" cy="202" r="6.5" fill="#1A1A1A"/>
+  <circle cx="142" cy="202" r="6.5" fill="#2F6F5E"/>
+  <circle cx="168" cy="202" r="6.5" fill="#C0392B"/>
+  <circle cx="194" cy="202" r="6.5" fill="#3D5A80"/>
+  <circle cx="220" cy="202" r="6.5" fill="#9C6B30"/>
+
+  <text x="110" y="238" font-family="'Songti SC', 'SimSun', 'PingFang SC', serif"
+        font-size="17" fill="#6B6258">千里共婵娟，两端一张画</text>
+
+  <text x="110" y="272" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="12" fill="#9C9387">Kotlin Multiplatform · Compose Multiplatform · E2E encrypted</text>
+
+  <!-- ================= 右区：水墨山月 ================= -->
+  <!-- 月晕 -->
+  <circle cx="680" cy="118" r="86" fill="url(#moonGlow)"/>
+
+  <!-- 圆月：宣纸色 + 竹青描边 + 淡墨山影 -->
+  <circle cx="680" cy="118" r="46" fill="#F7F3E9" stroke="#2F6F5E" stroke-opacity="0.4" stroke-width="1.5"/>
+  <path d="M 634 128 C 650 106 668 100 684 104 C 700 108 716 104 726 120"
+        fill="none" stroke="#1A1A1A" stroke-opacity="0.14" stroke-width="10" stroke-linecap="round"/>
+  <path d="M 638 138 C 656 120 674 116 692 120 C 710 124 724 120 726 134"
+        fill="none" stroke="#1A1A1A" stroke-opacity="0.09" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="726" cy="104" r="2.6" fill="#C0392B"/>
+
+  <!-- 远山（月下淡墨） -->
+  <path d="M 600 196 C 620 168 636 164 652 176 C 668 188 680 178 694 164 C 708 150 722 160 740 176 C 758 192 776 178 792 164"
+        fill="none" stroke="#1A1A1A" stroke-opacity="0.18" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 636 210 C 656 188 674 184 690 194 C 706 204 724 196 742 184 C 758 174 776 184 796 202"
+        fill="none" stroke="#3D5A80" stroke-opacity="0.10" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- 两端设备节点 + 虚线链路 -->
+  <circle cx="838" cy="76" r="6" fill="#1A1A1A"/>
+  <circle cx="838" cy="76" r="11" fill="none" stroke="#1A1A1A" stroke-opacity="0.25" stroke-width="1.5"/>
+  <circle cx="1012" cy="168" r="6" fill="#2F6F5E"/>
+  <circle cx="1012" cy="168" r="11" fill="none" stroke="#2F6F5E" stroke-opacity="0.3" stroke-width="1.5"/>
+  <path d="M 852 76 C 920 48 968 108 998 160"
+        fill="none" stroke="#6B6258" stroke-width="2" stroke-dasharray="5 9" stroke-linecap="round" opacity="0.6"/>
+  <!-- 数据包流动 -->
+  <circle cx="906" cy="72" r="3" fill="#C0392B"/>
+  <circle cx="958" cy="122" r="3" fill="#2F6F5E"/>
+
+  <!-- 水墨一笔画（主笔墨黑 + 辅笔竹青 + 点缀朱砂） -->
+  <path d="M 330 262 C 470 236 540 168 640 132 C 740 96 830 128 940 200 C 1010 246 1080 244 1130 214"
+        fill="none" stroke="#1A1A1A" stroke-width="22" stroke-linecap="round" opacity="0.88"/>
+  <path d="M 340 244 C 480 216 556 150 656 116 C 748 84 838 118 932 186 C 1002 230 1072 228 1122 198"
+        fill="none" stroke="#2F6F5E" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
+  <path d="M 700 296 C 780 288 844 236 906 176"
         fill="none" stroke="#C0392B" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
 
   <!-- 扫码配对（QR 视觉，右下角） -->
   <g fill="#2F6F5E">
     <!-- 定位角：左上 -->
-    <rect x="1090" y="216" width="30" height="30"/>
-    <rect x="1094" y="220" width="22" height="22" fill="#F7F3E9"/>
-    <rect x="1100" y="226" width="10" height="10"/>
+    <rect x="1086" y="206" width="16" height="16"/>
+    <rect x="1090" y="210" width="8" height="8" fill="#F7F3E9"/>
+    <rect x="1092" y="212" width="4" height="4"/>
     <!-- 定位角：右上 -->
-    <rect x="1130" y="216" width="30" height="30"/>
-    <rect x="1134" y="220" width="22" height="22" fill="#F7F3E9"/>
-    <rect x="1140" y="226" width="10" height="10"/>
+    <rect x="1114" y="206" width="16" height="16"/>
+    <rect x="1118" y="210" width="8" height="8" fill="#F7F3E9"/>
+    <rect x="1120" y="212" width="4" height="4"/>
     <!-- 定位角：左下 -->
-    <rect x="1090" y="256" width="30" height="30"/>
-    <rect x="1094" y="260" width="22" height="22" fill="#F7F3E9"/>
-    <rect x="1100" y="266" width="10" height="10"/>
+    <rect x="1086" y="234" width="16" height="16"/>
+    <rect x="1090" y="238" width="8" height="8" fill="#F7F3E9"/>
+    <rect x="1092" y="240" width="4" height="4"/>
     <!-- 数据模块 -->
-    <rect x="1120" y="216" width="10" height="10"/>
-    <rect x="1120" y="226" width="10" height="10"/>
-    <rect x="1090" y="246" width="10" height="10"/>
-    <rect x="1100" y="246" width="10" height="10"/>
-    <rect x="1110" y="246" width="10" height="10"/>
-    <rect x="1120" y="246" width="10" height="10"/>
-    <rect x="1130" y="246" width="10" height="10"/>
-    <rect x="1150" y="256" width="10" height="10"/>
-    <rect x="1150" y="266" width="10" height="10"/>
-    <rect x="1140" y="276" width="10" height="10"/>
+    <rect x="1106" y="206" width="4" height="4"/>
+    <rect x="1106" y="214" width="4" height="4"/>
+    <rect x="1114" y="214" width="4" height="4"/>
+    <rect x="1106" y="222" width="4" height="4"/>
+    <rect x="1086" y="222" width="4" height="4"/>
+    <rect x="1094" y="222" width="4" height="4"/>
+    <rect x="1114" y="222" width="4" height="4"/>
+    <rect x="1106" y="230" width="4" height="4"/>
+    <rect x="1114" y="230" width="4" height="4"/>
+    <rect x="1106" y="238" width="4" height="4"/>
+    <rect x="1114" y="238" width="4" height="4"/>
+    <rect x="1106" y="246" width="4" height="4"/>
   </g>
-  <text x="1090" y="304" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="13" fill="#9C9387">扫码即连</text>
+  <text x="1086" y="274" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="12" fill="#9C9387">扫码即连</text>
 </svg>
