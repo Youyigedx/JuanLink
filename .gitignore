@@ -27,6 +27,10 @@ hs_err_pid*.log
 # 发行包
 *.zip
 
+# 软著交存生成的产物（由 tools/make_copyright_submission.py 生成）
+# 体积大且随「软件名称/版本号」变化，不入库；生成方法与依据见 docs/交存源程序说明.md
+out/
+
 # Python（会合服务：不提交字节码缓存）
 __pycache__/
 *.pyc

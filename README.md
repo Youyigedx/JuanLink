@@ -197,7 +197,9 @@ python3 server/rendezvous_server.py --port 8080 --token "$(openssl rand -hex 16)
 
 ## License
 
-[MIT](LICENSE) © 2026 Juan LinK contributors
+[MIT](LICENSE) © 2026 赵裕轩
+
+> 本软件为**非职务开发的独立开发**成果，著作权人：赵裕轩。
 
 > ⚠️ 第三方开源组件声明：本项目 `composeUi` 模块内含 vendored 的 **DrawBox**
 > （Apache-2.0，作者 Akshay Sharma），位于 `composeUi/src/commonMain/kotlin/io/ak1/drawbox/`，

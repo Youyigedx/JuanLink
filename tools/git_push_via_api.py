@@ -28,6 +28,7 @@ git 的 smart-HTTP 端点只在 github.com 上，api.github.com 不提供该端�
 
 from __future__ import annotations
 
+import argparse
 import base64
 import hashlib
 import json
@@ -233,31 +234,60 @@ class Pusher:
         created = self.api.post("git/trees", {"tree": new_entries})
         return created["sha"]
 
-    def run(self, branch: str) -> None:
-        # 先取远端 head：提交范围必须以**远端 SHA** 为基准。
-        # ⚠️ 不能用 `main..HEAD`——本地 main 已经指向新提交，该范围会变成空集。
-        remote_head = json.loads(subprocess.run(
-            [GH, "api", f"repos/{self.api.repo}/git/ref/heads/{branch}"],
-            stdout=subprocess.PIPE, encoding="utf-8", errors="replace",
-        ).stdout)
-        remote_head_sha = remote_head["object"]["sha"]
-        remote_head_tree = json.loads(subprocess.run(
-            [GH, "api", f"repos/{self.api.repo}/git/commits/{remote_head_sha}"],
-            stdout=subprocess.PIPE, encoding="utf-8", errors="replace",
-        ).stdout)["tree"]["sha"]
+    def run(self, branch: str, api_base: str | None = None) -> None:
+        """
+        推送本地提交到远端分支。
 
-        commits = git_text(
-            self.repo, "rev-list", "--reverse", f"{remote_head_sha}..HEAD"
-        ).split()
+        api_base=None（默认）：以远端 head SHA 为基准列举提交。
+        api_base=<本地 ref>（如 origin/main）：**当远端 head 对象不在本地时**使用。
+          触发场景：先前经 API 推送时 GitHub 重建了提交对象，本地又没能 fetch 回来，
+          于是 `rev-list <远端SHA>..HEAD` 会报 Invalid revision range。
+          此时以本地记录的 origin/<branch> 为基准即可——它的树与远端 head 相同，
+          且是 HEAD 的祖先，服务端仍会判定为快进。
+        """
+        if api_base:
+            base_sha = git_text(self.repo, "rev-parse", api_base).strip()
+            base_tree = git_text(self.repo, "rev-parse", f"{base_sha}^{{tree}}").strip()
+            print(f"基准（本地 ref {api_base}）= {base_sha[:12]}")
+        else:
+            base_sha = None
+            base_tree = None
+
+        # 取远端 head（用于判断快进与打印；api_base 模式下容忍取不到）
+        remote_head_sha = None
+        remote_head_tree = None
+        try:
+            remote_head = json.loads(subprocess.run(
+                [GH, "api", f"repos/{self.api.repo}/git/ref/heads/{branch}"],
+                stdout=subprocess.PIPE, encoding="utf-8", errors="replace",
+            ).stdout)
+            remote_head_sha = remote_head["object"]["sha"]
+            remote_head_tree = json.loads(subprocess.run(
+                [GH, "api", f"repos/{self.api.repo}/git/commits/{remote_head_sha}"],
+                stdout=subprocess.PIPE, encoding="utf-8", errors="replace",
+            ).stdout)["tree"]["sha"]
+        except Exception as e:
+            if not api_base:
+                raise RuntimeError(f"取远端 head 失败且未指定 --api-base：{e}")
+
+        if base_sha is None:
+            base_sha, base_tree = remote_head_sha, remote_head_tree
+
+        commits = git_text(self.repo, "rev-list", "--reverse", f"{base_sha}..HEAD").split()
         if not commits:
-            print(f"远端 {branch} 已包含本地全部提交，无需推送。")
+            print(f"基准 {base_sha[:12]} 已包含本地全部提交，无需推送。")
             return
 
-        print(f"远端 {branch} 当前 = {remote_head_sha[:12]}")
+        print(f"远端 {branch} 当前 = {(remote_head_sha or '(未知/未取到)')[:12]}")
         print(f"待推送提交 {len(commits)} 个")
 
-        parent_sha = remote_head_sha
-        parent_tree = remote_head_tree
+        # 若远端 head 与基准树不同，说明两者内容有差异，需要提示（仍按快进尝试）
+        if remote_head_tree and base_tree and remote_head_tree != base_tree:
+            print("⚠️ 远端 head 树与本地基准树不一致——本机可能缺少远端对象，")
+            print("   若推送被拒（非快进），请先 fetch 对齐后再试。")
+
+        parent_sha = base_sha
+        parent_tree = base_tree
 
         for c in commits:
             local_tree = git_text(self.repo, "rev-parse", f"{c}^{{tree}}").strip()
@@ -288,14 +318,19 @@ class Pusher:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 3:
-        print(__doc__)
-        return 2
-    local_repo, remote_repo, branch = argv[0], argv[1], (argv[2] if len(argv) > 2 else "main")
+    ap = argparse.ArgumentParser(description="通过 GitHub Git Data API 推送本地提交")
+    ap.add_argument("repo", help="本地仓库路径")
+    ap.add_argument("repo_full", help="owner/name")
+    ap.add_argument("branch", nargs="?", default="main")
+    ap.add_argument("--api-base", default=None,
+                    help="以本地 ref 为提交范围基准（如 origin/main）。"
+                         "用于远端 head 对象不在本地、导致 Invalid revision range 的场景。")
+    a = ap.parse_args(argv)
+
     if not os.path.exists(GH):
         print(f"找不到 gh CLI: {GH}")
         return 2
-    Pusher(local_repo, remote_repo).run(branch)
+    Pusher(a.repo, a.repo_full).run(a.branch, api_base=a.api_base)
     return 0
 
 
