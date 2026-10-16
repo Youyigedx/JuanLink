@@ -106,27 +106,55 @@ _SKIP_LINE = re.compile(
 
 
 def _is_noise(line: str) -> bool:
-    """判断该行是否属于打印时应丢弃的噪声（HTML 标签、徽章等）。"""
+    """判断该行是否属于打印时应丢弃的噪声（HTML 标签、远程徽章等）。"""
     s = line.strip()
     if not s:
         return False
-    if _SKIP_LINE.match(s):
-        return True
-    # 徽章行（README 里是一行一个 ![...](...)）
+    # 图片语法交给插图逻辑处理，不在这里丢弃
+    if _IMG_RE.match(s):
+        return False
     if re.match(r"^!\[[^\]]*\]\(.*\)\s*$", s):
         return True
-    return False
+    return bool(_SKIP_LINE.match(s))
 
 
 def _is_table_sep(line: str) -> bool:
     return bool(re.match(r"^\s*\|?[\s:|-]+\|[\s:|-]*$", line)) and "-" in line
 
 
-def render_markdown(md: str, title_for_h1: str | None = None) -> list[tuple[str, str]]:
+# 图片语法 ![alt](src)
+_IMG_RE = re.compile(r"^!\[([^\]]*)\]\(([^)]+)\)\s*$")
+
+# 图片按页内占位行数估算（A4 宽 14cm 有效宽、图注 2 行）
+FIG_LINES = 16
+
+
+def _figure_rows(alt: str, src: str, base_dir: str = "") -> list[tuple[str, str]]:
+    """
+    把一张图渲染成打印行：fig 标记 + 图注。
+
+    src 是 Markdown 里的相对路径，**相对于该 md 文件所在目录**（base_dir），
+    不是仓库根——否则 `docs/*.md` 里写的 `../assets/x.png` 会解析错。
+    这里统一折算成「相对仓库根」的路径存放。
+    """
+    if base_dir and not os.path.isabs(src):
+        # 相对 md 目录 -> 相对仓库根
+        src = os.path.normpath(os.path.join(base_dir, src)).replace("\\", "/")
+    rows: list[tuple[str, str]] = [("fig", src)]
+    caption = f"图：{alt}" if alt else "图"
+    rows.append(("code", ""))
+    for seg in _wrap_cjk(caption, PAGE_WIDTH - 4):
+        rows.append(("code", "    " + seg))
+    return rows
+
+
+def render_markdown(md: str, base_dir: str = "") -> list[tuple[str, str]]:
     """
     把 Markdown 渲染成 (kind, text) 行序列。
-    kind ∈ {"file"(章节标题), "code"(普通正文行)}，复用源程序生成器的行类型，
-    以保证 HTML 渲染一致。
+    kind ∈ {"file"(章节标题), "code"(正文行), "fig"(插图)}。
+
+    base_dir：该 md 文件所在目录（相对仓库根，如 "docs"）。
+    用于正确解析其中的图片相对路径。
     """
     rows: list[tuple[str, str]] = []
     lines = md.replace("\r\n", "\n").replace("\r", "\n").split("\n")
@@ -154,7 +182,20 @@ def render_markdown(md: str, title_for_h1: str | None = None) -> list[tuple[str,
 
         stripped = line.strip()
 
-        # ---- 丢弃打印噪声（HTML 容器、徽章、纯图片行）
+        # ---- 插图：![alt](src) —— 仅本地路径；远程图片（徽章）按下方的噪声逻辑丢弃
+        if not in_code:
+            im = _IMG_RE.match(stripped)
+            if im:
+                alt, src = im.group(1).strip(), im.group(2).strip()
+                if not re.match(r"^(https?:|data:)", src):
+                    rows.extend(_figure_rows(alt, src, base_dir))
+                    i += 1
+                    continue
+                # 远程图片 → 落到噪声分支丢弃
+                i += 1
+                continue
+
+        # ---- 丢弃打印噪声（HTML 容器、远程徽章等）
         if not in_code and _is_noise(line):
             i += 1
             continue
@@ -245,6 +286,21 @@ def render_markdown(md: str, title_for_h1: str | None = None) -> list[tuple[str,
 
 # ---------------------------------------------------------------- 组装
 
+def _expand_figs(rows):
+    """把 ("fig", src) 展开成 FIG_LINES 个占位行，让分页算得准。
+
+    插图在 HTML 里按高度渲染，但分页只认行数，因此固定占 FIG_LINES 行。
+    """
+    out = []
+    for kind, text in rows:
+        if kind == "fig":
+            out.append((kind, text))
+            out.extend(("code", "") for _ in range(FIG_LINES - 1))
+        else:
+            out.append((kind, text))
+    return out
+
+
 def _paginate(rows, lines_per_page, pagebreak="pagebreak"):
     """
     按显式分页符切页，返回页列表（每页 ≤ lines_per_page 行）。
@@ -303,7 +359,8 @@ def build_document(root: str, name: str, version: str, lines_per_page: int):
             continue
         with open(full, "r", encoding="utf-8", errors="replace") as f:
             md = f.read()
-        rendered.append((title, render_markdown(md)))
+        base_dir = os.path.dirname(rel).replace("\\", "/")
+        rendered.append((title, render_markdown(md, base_dir=base_dir)))
         used.append(rel)
 
     # ---- 封面（独占一页）
@@ -337,11 +394,23 @@ def build_document(root: str, name: str, version: str, lines_per_page: int):
         return r
 
     def page_of_line(rows_now, target_index):
-        """第 1 遍：找到 target_index 行所在的页号（1 基）。"""
-        pages = _paginate(rows_now, lines_per_page)
+        """第 1 遍：找到 target_index 行所在的页号（1 基）。
+
+        ⚠️ 必须先 _expand_figs：插图在生成的行序列里占 1 行，但分页时占
+        FIG_LINES 行；不展开会让后面的章节页码全部偏小。
+        注意 target_index 是「未展开」坐标系里的下标，这里同时换算。
+        """
+        expanded = _expand_figs(rows_now)
+        # 把未展开下标换算成展开后的下标：累加每个 fig 多出的 (FIG_LINES-1) 行
+        shift = 0
+        for k in range(min(target_index, len(rows_now))):
+            if rows_now[k][0] == "fig":
+                shift += FIG_LINES - 1
+        target = target_index + shift
+        pages = _paginate(expanded, lines_per_page)
         acc = 0
         for pno, pg in enumerate(pages, start=1):
-            if acc + len(pg) > target_index:
+            if acc + len(pg) > target:
                 return pno
             acc += len(pg)
         return len(pages)
@@ -371,12 +440,57 @@ def build_document(root: str, name: str, version: str, lines_per_page: int):
     rows = assemble(toc_body)
 
     # 补足每页到 lines_per_page 行（官方要求文档每页 ≥30 行）
-    pages = _pad_pages(_paginate(rows, lines_per_page), lines_per_page)
+    pages = _pad_pages(_paginate(_expand_figs(rows), lines_per_page), lines_per_page)
     total_lines = sum(len(p) for p in pages)
     return rows, total_lines, len(pages), used, missing, pages
 
 
-def render_html(pages, selected, header, lines_per_page) -> str:
+def _file_url(path: str) -> str:
+    """把本地绝对路径转成 HTML 可用的 file:// URL（正确处理空格与中文）。"""
+    from urllib.parse import quote
+    p = os.path.abspath(path).replace("\\", "/")
+    return "file:///" + quote(p, safe="/:")
+
+
+def _rel_url(rel: str) -> str:
+    """相对路径转 URL（处理空格与中文）。"""
+    from urllib.parse import quote
+    return quote(rel.replace("\\", "/"), safe="/")
+
+
+def collect_figs(pages) -> list[str]:
+    """收集所有插图源路径（保持出现顺序、去重）。"""
+    out = []
+    for pg in pages:
+        for kind, text in pg:
+            if kind == "fig" and text not in out:
+                out.append(text)
+    return out
+
+
+def copy_figs(root: str, out_dir: str, figs: list[str]) -> dict[str, str]:
+    """
+    把插图复制到 <out>/figs/ 并返回 源路径 -> 相对路径(相对于 out_dir) 的映射。
+
+    为什么要复制：让 out/ 目录自成一体，提交时整目录打包即可，
+    不必依赖仓库其他位置的相对路径。
+    """
+    import shutil
+    dst_dir = os.path.join(out_dir, "figs")
+    os.makedirs(dst_dir, exist_ok=True)
+    mapping = {}
+    for src in figs:
+        abs_src = src if os.path.isabs(src) else os.path.join(root, src)
+        if not os.path.exists(abs_src):
+            print(f"  ⚠️ 插图不存在，已跳过：{src}")
+            continue
+        name = os.path.basename(abs_src)
+        shutil.copy2(abs_src, os.path.join(dst_dir, name))
+        mapping[src] = os.path.join("figs", name)
+    return mapping
+
+
+def render_html(pages, selected, header, lines_per_page, root=None, fig_map=None) -> str:
     body = []
     for i in selected:
         page_no = i + 1
@@ -385,11 +499,37 @@ def render_html(pages, selected, header, lines_per_page) -> str:
             f'<div class="hdr"><span class="hname">{html.escape(header)}</span>'
             f'<span class="hpage">{page_no}</span></div>'
         )
-        body.append('<pre class="doc">')
+        in_pre = False
+
+        def open_pre():
+            nonlocal in_pre
+            if not in_pre:
+                body.append('<pre class="doc">')
+                in_pre = True
+
+        def close_pre():
+            nonlocal in_pre
+            if in_pre:
+                body.append("</pre>")
+                in_pre = False
+
         for kind, text in pages[i]:
+            if kind == "fig":
+                # 插图必须跳出 <pre>（pre 里放 <img> 不会渲染成图）
+                close_pre()
+                src = (fig_map or {}).get(text, text)
+                if fig_map:
+                    # 已复制到 out/figs/，用相对路径引用，整目录打包即可
+                    body.append(f'<div class="fig"><img src="{html.escape(_rel_url(src))}" alt=""></div>')
+                else:
+                    abs_path = src if os.path.isabs(src) else os.path.join(root or ".", src)
+                    body.append(f'<div class="fig"><img src="{html.escape(_file_url(abs_path))}" alt=""></div>')
+                continue
+            open_pre()
             body.append(f'<span class="sec">{html.escape(text)}</span>' if kind == "file"
                         else html.escape(text))
-        body.append("</pre></div>")
+        close_pre()
+        body.append("</div>")
     return f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <title>软件说明书（交存文档） — {html.escape(header)}</title>
@@ -408,6 +548,8 @@ def render_html(pages, selected, header, lines_per_page) -> str:
   pre.doc {{ margin: 0; font: 10px/1.5 "Microsoft YaHei", "SimSun", monospace;
              white-space: pre; color: #111; }}
   .sec {{ display: block; font-weight: 700; color: #0a3d62; }}
+  .fig {{ margin: 1mm 0 2mm; text-align: center; }}
+  .fig img {{ max-width: 100%; max-height: 150mm; border: 1px solid #ccc; }}
   @media print {{
     html, body {{ background: #fff; }}
     .note {{ display: none; }}
@@ -420,7 +562,8 @@ def render_html(pages, selected, header, lines_per_page) -> str:
   <b>打印说明</b>：本文件为软著登记「文档」交存打印版。请在浏览器中
   <b>Ctrl+P → 目标改为「另存为 PDF」→ 纵向 → 页边距默认</b>，即得 A4 纵向 PDF。<br>
   官方要求：文档前 30 页 + 后 30 页（不足 60 页则全部提交）、<b>每页 ≥30 行</b>、
-  页眉为「软件名称 + 版本号」且须与申请表一致。本提示条不会打印。
+  页眉为「软件名称 + 版本号」且须与申请表一致。本提示条不会打印。<br>
+  ⚠️ 本文件内嵌界面截图，请使用本目录下的 HTML 打开以正常显示图片。
 </div>
 {chr(10).join(body)}
 </body></html>
@@ -445,16 +588,25 @@ def main(argv):
         root, a.name, a.version, a.lines_per_page)
     selected, rule_note = select_first_last(pages)
 
+    # 插图：复制到 out/figs/ 并改用相对路径引用，保证提交目录自成一体
+    figs = collect_figs(pages)
+    fig_map = copy_figs(root, out_dir, figs) if figs else {}
+
     html_path = os.path.join(out_dir, "交存文档-软件说明书.html")
     with open(html_path, "w", encoding="utf-8") as f:
-        f.write(render_html(pages, selected, header, a.lines_per_page))
+        f.write(render_html(pages, selected, header, a.lines_per_page,
+                            root=root, fig_map=fig_map))
 
     txt_path = os.path.join(out_dir, "交存文档-软件说明书.txt")
     with open(txt_path, "w", encoding="utf-8") as f:
         for i in selected:
             f.write(f"{header}\t\t\t\t\t\t\t\t\t{i + 1}\n")
             for _k, text in pages[i]:
-                f.write(text + "\n")
+                # 纯文本版无法显示图片，标注图名占位，避免读者以为漏内容
+                if _k == "fig":
+                    f.write(f"[插图：{os.path.basename(text)}]\n")
+                else:
+                    f.write(text + "\n")
 
     print(f"页眉           : {header}")
     print(f"每页行数       : {a.lines_per_page}（官方要求文档 >=30）")

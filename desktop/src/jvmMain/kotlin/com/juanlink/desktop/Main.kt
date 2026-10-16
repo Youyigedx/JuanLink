@@ -123,10 +123,17 @@ private fun importImageFromDisk(app: AppState) {
     app.importImageBytes(bytes)
 }
 
+/**
+ * 桌面应用根 UI。
+ *
+ * @param appState 可选注入。生产环境传 null（内部自行创建）；
+ *   文档配图生成（`DocScreenshotTest`）与 UI 测试可注入受控实例，
+ *   从而渲染**真实的完整 UI 树**，而不是另写一套缩略图。
+ */
 @Composable
-fun AppRoot() {
-    val app = remember {
-        AppState(
+fun AppRoot(appState: AppState? = null) {
+    val app = remember(appState) {
+        appState ?: AppState(
             snapshotIo = DesktopSnapshotIo(),
             turnConfigIo = DesktopTurnConfigIo(),
             rendezvousConfigIo = DesktopRendezvousConfigIo(),
