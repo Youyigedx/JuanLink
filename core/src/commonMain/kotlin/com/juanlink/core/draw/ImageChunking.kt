@@ -5,8 +5,8 @@ package com.juanlink.core.draw
  *
  * 发送流程（composeUi DrawBoxHost 编排）：占位 upsert（imageData 空）
  * → [chunkBytes] 逐块 ImageChunkOp → ImageReadyOp（SHA-256 校验）。
- * 接收端在 apply(ImageReadyOp) 时缺块检测 / 重组 / 校验，与自研引擎时代
- * ImageTransfer 的 16KB 分块 + SHA-256 校验模式一致。
+ * 接收端在 apply(ImageReadyOp) 时缺块检测 / 重组 / 校验，沿用早期自研引擎
+ * 16KB 分块 + SHA-256 校验的设计（彼时的 `ImageTransfer` 已废弃，不再是现有类型）。
  */
 object ImageChunking {
 

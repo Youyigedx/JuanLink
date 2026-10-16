@@ -53,8 +53,10 @@ data class OpId(
 }
 
 /**
- * 操作信封：序列化后的业务操作（CanvasOp）经加密通道传输。
- * [payload] 为 CanvasOp 的 CBOR 字节。
+ * 操作信封：序列化后的业务操作经加密通道传输。
+ * [payload] 为操作对象的 CBOR 字节。
+ *
+ * 注：本项目实例化为 `DrawOp`（早期自研引擎时代的 `CanvasOp` 已废弃、不再是现有类型）。
  */
 @Serializable
 data class OpEnvelope(
