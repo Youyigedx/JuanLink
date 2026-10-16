@@ -12,10 +12,20 @@ build/
 
 # Android
 *.jks
+# keystore 的备份/改名副本（如 release.jks.old-*.bak）——`*.jks` 匹配不到，需显式忽略
+*.jks.*
+*.keystore
 local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+# 签名产物与发布物：体积大且含签名信息，不入库
+*.apk
+*.aab
+*.ap_
+# R8 生成的映射与缺失规则（本地产物）
+mapping.txt
+missing_rules.txt
 
 # 本地工具/个人配置
 .claude/
