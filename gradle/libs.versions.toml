@@ -6,7 +6,6 @@ agp = "8.11.2"
 coroutines = "1.10.2"
 serialization = "1.9.0"
 zxing = "3.5.4"
-libsodium = "0.0.3"
 camerax = "1.4.2"
 
 [libraries]
@@ -14,7 +13,6 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-serialization-cbor = { module = "org.jetbrains.kotlinx:kotlinx-serialization-cbor", version.ref = "serialization" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
-multiplatform-crypto = { module = "com.ionspin.kotlin:multiplatform-crypto", version.ref = "libsodium" }
 camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }

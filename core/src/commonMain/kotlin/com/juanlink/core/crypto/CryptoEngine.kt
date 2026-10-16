@@ -6,7 +6,10 @@ package com.juanlink.core.crypto
  * 各平台 actual：
  * - JVM/macOS：JDK 21 内置 JCA（X25519 / AES-GCM / HmacSHA256）
  * - Android：minSdk 33+ 平台 JCA 原生支持（XDH/XEC）
- * - iOS：ionspin multiplatform-crypto（libsodium）
+ * - iOS：**尚未实现**（`iosApp` 目前只有工程骨架，无 Kotlin 源码）。
+ *   将来实现时建议同样走系统 CryptoKit / JCA 等价接口，**不引入第三方密码学库**——
+ *   版本目录中原先声明的 `multiplatform-crypto`（ionspin/libsodium）从未被任何模块引用，
+ *   已移除，以免读者误以为 iOS 已有实现。
  *
  * 业务代码只依赖本接口，不感知平台差异。
  */
