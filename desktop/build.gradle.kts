@@ -48,6 +48,11 @@ compose.desktop {
             packageName = "JuanLink"
             packageVersion = "1.0.0"
             description = "Juan LinK"
+            // ⚠️ 必须显式声明 java.net.http：会合客户端用 JDK 内置 HttpClient，
+            // 而 jpackage 默认只打包最小模块集，不含 java.net.http。
+            // 漏掉它的后果是**打包后一启动就崩**（NoClassDefFoundError: java/net/http/HttpClient），
+            // 而 Gradle run/test 环境不会暴露——必须在 createDistributable 产物上实测。
+            modules += listOf("java.net.http")
             // 启动器 exe 图标（Windows 需 .ico，运行时窗口图标在 Main.kt 用 painterResource 设置）
             windows {
                 iconFile.set(file("src/jvmMain/resources/icon.ico"))

@@ -170,7 +170,7 @@ data class Candidate(val host: String, val port: Int)
 
 ### 4.3 配对码（PairingCode）
 
-格式 `DDDD-LLLC`，如 `5689-ABCD`。字符集 Crockford 变体（去 I/L/O/U）：
+格式 `DDDD-LLLC`，如 `5689-ABCN`。字符集 Crockford 变体（去 I/L/O/U）：
 `0123456789ABCDEFGHJKMNPQRSTVWXYZ`。前 4 位数字，中 3 位字母，尾位校验字符
 `= CHARSET[Σ(charValue × position) % 32]`。大小写/分隔符宽容。
 

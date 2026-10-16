@@ -73,7 +73,11 @@ object PairingCodec {
 }
 
 /**
- * 配对码：格式 `DDDD-LLLC`，如 `5689-ABCD`。
+ * 配对码：格式 `DDDD-LLLC`，如 `5689-ABCN`。
+ *
+ * ⚠️ 示例必须是**校验位正确**的码：`checkChar("5689ABC") = 'N'`。
+ * 早先文档与 UI 里写的 `5689-ABCD` 校验位是错的，用户照抄会被判"校验位不对"。
+ * `PairingCode.sample()` 提供可直接展示的样例，并由测试 `sampleCodeIsValid` 钉住。
  *
  * - 查找令牌而非数据载体（仅 ~20bit 信息量，装不下公钥）
  * - 字符集 Crockford 变体（去 I/L/O/U），尾位为校验字符，防误输
@@ -121,6 +125,14 @@ object PairingCode {
     /** 标准化：去分隔符、转大写 */
     fun normalize(code: String): String =
         code.replace("-", "").replace(" ", "").uppercase()
+
+    /**
+     * UI/文档用的**合法**样例码（校验位正确，可通过 [validate]）。
+     *
+     * 硬编码而非随机生成，是为了让文档、界面提示、测试三者引用同一个值，
+     * 避免再出现「示例码校验位不对」这类让人照抄就报错的问题。
+     */
+    fun sample(): String = "5689-ABCN"
 }
 
 /**
@@ -170,12 +182,27 @@ class PairingManager(private val now: () -> Long = ::nowEpochMillis) {
         return p
     }
 
-    /** 为一次配对登记配对码（持有方），返回生成的码 */
+    /** 为一次配对登记配对码（持有方，本地生成），返回生成的码 */
     fun registerCode(info: PairingInfo): String {
         val code = PairingCode.generate()
         codeTable[PairingCode.normalize(code)] = info
         return code
     }
+
+    /**
+     * 用**外部（会合服务器）分配的短码**登记本地待查找表。
+     *
+     * 服务端模式下短码权威在服务器：服务器负责唯一性与限流，本地表只用于
+     * 同机自测/离线兜底。服务器不可达时调用方应回退到 [registerCode]。
+     */
+    fun registerCode(info: PairingInfo, code: String): String {
+        val norm = PairingCode.normalize(code)
+        codeTable[norm] = info
+        return norm
+    }
+
+    /** 当前本地待查找的配对码数量（自测/诊断用） */
+    val pendingCodeCount: Int get() = codeTable.size
 
     /** 输入方用配对码换取配对信息；带限流 */
     fun lookupCode(code: String): PairingInfo? {

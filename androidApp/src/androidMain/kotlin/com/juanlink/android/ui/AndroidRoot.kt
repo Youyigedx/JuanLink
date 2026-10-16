@@ -185,6 +185,9 @@ fun AndroidRoot(app: AppState) {
                             app.showSettings = false
                         },
                         onClose = { app.showSettings = false },
+                        rendezvous = app.rendezvousConfig,
+                        rendezvousOnline = app.rendezvousOnline,
+                        onSaveRendezvous = { app.saveRendezvousConfig(it) },
                     )
                 }
             }
@@ -201,6 +204,8 @@ fun AndroidRoot(app: AppState) {
                         onJoin = { raw -> app.join(raw) },
                         onDisconnect = { app.disconnect() },
                         onScanClick = { showScanner = true },
+                        codeIsRemote = app.pairingCodeIsRemote,
+                        shortCodeEnabled = app.rendezvousConfig.enabled,
                     )
                 }
             }
@@ -214,6 +219,9 @@ fun AndroidRoot(app: AppState) {
                         onClose = { app.dismissSetup() },
                         locked = app.setupLocked,
                         onSkip = { app.skipSetup() },
+                        rendezvous = app.rendezvousConfig,
+                        rendezvousOnline = app.rendezvousOnline,
+                        onSaveRendezvous = { app.saveRendezvousConfig(it) },
                     )
                 }
             }

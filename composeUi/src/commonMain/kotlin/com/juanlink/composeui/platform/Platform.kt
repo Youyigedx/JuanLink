@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import com.juanlink.core.qr.QrBitmap
 import com.juanlink.core.transport.Transport
+import kotlinx.serialization.json.Json
 
 /**
  * UI 层平台抽象（expect/actual）。
@@ -62,4 +63,39 @@ class InMemoryTurnConfigIo : TurnConfigIo {
     override fun save(text: String) {
         data = text
     }
+}
+
+/**
+ * 会合服务配置持久化接口（短配对码接入，JSON 文本）。
+ * 桌面端读写 user.home/.juanlink/rendezvous.json；安卓端读写 SharedPreferences。
+ *
+ * ⚠️ 该配置指向的服务器会获得「公钥分发权」——请只填自己掌控的服务器。
+ * 详见 `docs/protocol.md` §10。
+ */
+interface RendezvousConfigIo {
+    fun load(): String?
+    fun save(text: String)
+}
+
+/** 内存会合配置存储（无持久化能力平台回退 / 测试用） */
+class InMemoryRendezvousConfigIo : RendezvousConfigIo {
+    private var data: String? = null
+    override fun load(): String? = data
+    override fun save(text: String) {
+        data = text
+    }
+}
+
+/** 会合配置的 JSON 编解码（复用 [RendezvousConfigIo] 的纯文本通道） */
+object RendezvousConfigJson {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    fun encode(config: com.juanlink.core.rendezvous.RendezvousConfig): String =
+        json.encodeToString(com.juanlink.core.rendezvous.RendezvousConfig.serializer(), config)
+
+    /** 解析失败返回 null（调用方回退到默认「未配置」） */
+    fun decode(text: String): com.juanlink.core.rendezvous.RendezvousConfig? =
+        runCatching {
+            json.decodeFromString(com.juanlink.core.rendezvous.RendezvousConfig.serializer(), text)
+        }.getOrNull()
 }

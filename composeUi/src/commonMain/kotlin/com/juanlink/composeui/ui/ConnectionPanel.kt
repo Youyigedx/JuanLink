@@ -51,6 +51,10 @@ fun ConnectionPanel(
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier,
     onScanClick: (() -> Unit)? = null,
+    /** 短码是否由会合服务器下发（false=仅本机可用，UI 需给出提示与兜底引导） */
+    codeIsRemote: Boolean = true,
+    /** 是否已配置会合服务器（决定加入区的提示与输入框标签） */
+    shortCodeEnabled: Boolean = true,
 ) {
     Column(
         modifier = modifier
@@ -98,8 +102,12 @@ fun ConnectionPanel(
             }
             val connectionString = remember(pairing) { PairingCodec.toQrPayload(pairing) }
 
-            Text("扫码加入，或点击复制配对码：", color = Palette.HuiMo, fontSize = 13.sp)
             if (pairingCode != null) {
+                Text(
+                    if (codeIsRemote) "对方输入这个配对码即可加入：" else "配对码（仅本机可用）：",
+                    color = Palette.HuiMo,
+                    fontSize = 13.sp,
+                )
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -109,10 +117,18 @@ fun ConnectionPanel(
                         }
                         .padding(horizontal = 10.dp, vertical = 2.dp),
                 ) {
-                    Text(pairingCode, color = Palette.ZhuShaHong, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(pairingCode, color = Palette.ZhuShaHong, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                }
+                if (!codeIsRemote) {
+                    Text(
+                        "未配置会合服务器，此码无法跨设备解析。请让对方扫码，或点下方复制连接串。",
+                        color = Palette.ZhuShaHong,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
-            // 复制完整连接串（对方「加入协作」粘贴用）
+            // 兜底通道：扫码不可用 / 未配服务器时仍可手工传递连接串
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -123,13 +139,13 @@ fun ConnectionPanel(
                     }
                     .padding(horizontal = 14.dp, vertical = 6.dp),
             ) {
-                Text("复制连接串", color = Palette.ZhuQing, fontSize = 13.sp)
+                Text("复制连接串（备用）", color = Palette.ZhuQing, fontSize = 13.sp)
             }
             if (copyHint.isNotEmpty()) {
                 Text(copyHint, color = Palette.ZhuQing, fontSize = 12.sp)
             }
         } else {
-            JoinBox(onJoin = onJoin, onScanClick = onScanClick)
+            JoinBox(onJoin = onJoin, onScanClick = onScanClick, shortCodeEnabled = shortCodeEnabled)
         }
 
         Text(statusText, color = Palette.HuiMo, fontSize = 13.sp, textAlign = TextAlign.Center)
@@ -151,16 +167,26 @@ fun ConnectionPanel(
 private val ColorWhite = androidx.compose.ui.graphics.Color.White
 
 @Composable
-private fun JoinBox(onJoin: (String) -> Unit, onScanClick: (() -> Unit)?) {
+private fun JoinBox(onJoin: (String) -> Unit, onScanClick: (() -> Unit)?, shortCodeEnabled: Boolean) {
     var payload by remember { mutableStateOf("") }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = payload,
             onValueChange = { payload = it },
-            label = { Text("粘贴对方二维码中的连接串") },
-            minLines = 3,
+            label = { Text(if (shortCodeEnabled) "输入配对码（如 5689-ABCN）" else "粘贴对方连接串") },
+            singleLine = shortCodeEnabled,
+            minLines = if (shortCodeEnabled) 1 else 3,
             modifier = Modifier.width(320.dp),
         )
+        if (!shortCodeEnabled) {
+            Text(
+                "尚未配置会合服务器，短配对码不可用。请在「设置」中填写你的服务器地址，" +
+                    "或让对方点「复制连接串（备用）」发给你。",
+                color = Palette.HuiMo,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))

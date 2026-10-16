@@ -9,8 +9,11 @@ import com.juanlink.composeui.draw.DrawBoxHost
 import com.juanlink.composeui.draw.DrawingSnapshot
 import com.juanlink.composeui.draw.DrawingSnapshotJson
 import com.juanlink.composeui.draw.DrawingSnapshotStore
+import com.juanlink.composeui.platform.InMemoryRendezvousConfigIo
 import com.juanlink.composeui.platform.InMemorySnapshotIo
 import com.juanlink.composeui.platform.InMemoryTurnConfigIo
+import com.juanlink.composeui.platform.RendezvousConfigIo
+import com.juanlink.composeui.platform.RendezvousConfigJson
 import com.juanlink.composeui.platform.SnapshotIo
 import com.juanlink.composeui.platform.TurnConfigIo
 import com.juanlink.composeui.platform.createPlatformTransport
@@ -25,6 +28,11 @@ import com.juanlink.core.pairing.PairingInfo
 import com.juanlink.core.pairing.PairingManager
 import com.juanlink.core.quality.QualityGrade
 import com.juanlink.core.quality.QualityMonitor
+import com.juanlink.core.rendezvous.DefaultRendezvousClient
+import com.juanlink.core.rendezvous.PairingInfoWire
+import com.juanlink.core.rendezvous.RendezvousClient
+import com.juanlink.core.rendezvous.RendezvousCodeFormat
+import com.juanlink.core.rendezvous.RendezvousConfig
 import com.juanlink.core.session.SessionManager
 import com.juanlink.core.session.SessionState
 import com.juanlink.core.transport.Transport
@@ -56,6 +64,9 @@ class AppState(
     private val transport: Transport = createPlatformTransport(),
     private val snapshotIo: SnapshotIo = InMemorySnapshotIo(),
     private val turnConfigIo: TurnConfigIo = InMemoryTurnConfigIo(),
+    private val rendezvousConfigIo: RendezvousConfigIo = InMemoryRendezvousConfigIo(),
+    /** 会合客户端可注入：测试用假实现，生产用平台默认（JDK HttpClient） */
+    private val rendezvous: RendezvousClient = DefaultRendezvousClient,
 ) {
 
     /** DrawBox 画布宿主（响应式 state + 本地意图 + SyncDocument<DrawOp>） */
@@ -69,6 +80,18 @@ class AppState(
 
     var pairing by mutableStateOf<PairingInfo?>(null)
     var pairingCode by mutableStateOf<String?>(null)
+
+    /** 会合服务配置（短配对码）。未配置 → 短码仅在同机可用，跨设备须用连接串/扫码 */
+    var rendezvousConfig by mutableStateOf(RendezvousConfig())
+        private set
+
+    /** 会合服务器连通性（设置面板显示）；null = 未测 */
+    var rendezvousOnline by mutableStateOf<Boolean?>(null)
+        private set
+
+    /** 短码是否由服务器下发（true=可跨设备；false=本地兜底，仅同机可解析） */
+    var pairingCodeIsRemote by mutableStateOf(false)
+        private set
     var statusText by mutableStateOf("未连接")
     var isConnected by mutableStateOf(false)
     var showConnection by mutableStateOf(false)
@@ -196,6 +219,19 @@ class AppState(
         }
         // 首次启动未配置自定义 TURN → 自动弹配置引导（可关闭，先本地画画）
         if (turnServers.isEmpty()) showSetup = true
+
+        // 会合服务配置：加载并异步探活（不阻塞启动；探活只在后台线程发一个 GET /health）
+        rendezvousConfig = runCatching {
+            rendezvousConfigIo.load()?.let { RendezvousConfigJson.decode(it) }
+        }.getOrNull() ?: RendezvousConfig()
+        if (rendezvousConfig.enabled) {
+            appScope.launch {
+                rendezvousOnline = withContext(Dispatchers.IO) {
+                    rendezvous.ping(rendezvousConfig)
+                }
+                println("[JUAN] 会合服务器 ${rendezvousConfig.baseUrl()} 探活=${rendezvousOnline}")
+            }
+        }
 
         // 快照历史：加载持久化 + 自动捕获循环
         loadSnapshots()
@@ -368,47 +404,98 @@ class AppState(
                         baseInfo
                     }
                     println("[JUAN] createRoom: 二维码候选 ${info.candidates.joinToString { "${it.host}:${it.port}(type=${it.type})" }}, turn=${info.turn}")
-                    val code = pairingManager.registerCode(info)
-                    info to code
+
+                    // ---- 短配对码 ----
+                    // 本地先生成候选码（服务端权威分配，本地仅作兜底），再决定本地登记还是登记到会合服务器。
+                    val payloadJson = PairingCodec.toQrPayload(info)
+                    val localCode = RendezvousCodeFormat.generate(
+                        com.juanlink.core.crypto.CryptoEngine.randomBytes(8),
+                    )
+                    if (rendezvousConfig.enabled) {
+                        // 服务端模式：登记失败即报错，绝不让用户拿到一个「谁也解析不了」的死码
+                        val issued = withContext(Dispatchers.IO) {
+                            rendezvous.register(
+                                PairingInfoWire(json = payloadJson, code = localCode),
+                                rendezvousConfig,
+                            )
+                        } ?: throw IllegalStateException(
+                            "会合服务器不可达（${rendezvousConfig.baseUrl()}），无法下发短配对码",
+                        )
+                        rendezvousOnline = true
+                        pairingManager.registerCode(info, issued.code)
+                        Triple(info, issued.code, true)
+                    } else {
+                        // 未配置服务器：短码仅本机可解析（同机双开自测），跨设备请扫码或用连接串
+                        rendezvousOnline = null
+                        val code = pairingManager.registerCode(info, localCode)
+                        Triple(info, code, false)
+                    }
                 }
             }
-            result.onSuccess { (info, code) ->
+            result.onSuccess { (info, code, remote) ->
                 pairing = info
                 pairingCode = code
+                pairingCodeIsRemote = remote
                 showConnection = true
                 val hasTcp = info.candidates.any { it.type == "tcp" }
                 val hasRelay = info.candidates.any { it.type == "relay" }
-                statusText = when {
-                    hasTcp && hasRelay -> "等待扫码/配对…（局域网直连 + 中继兜底）"
-                    hasTcp -> "等待扫码/配对…（支持局域网直连）"
-                    hasRelay -> "等待扫码/配对…（仅中继可达）"
-                    else -> "等待扫码/配对…"
+                val netHint = when {
+                    hasTcp && hasRelay -> "局域网直连 + 中继兜底"
+                    hasTcp -> "支持局域网直连"
+                    hasRelay -> "仅中继可达"
+                    else -> ""
+                }
+                statusText = if (remote) {
+                    if (netHint.isEmpty()) "等待对方输入配对码…" else "等待对方输入配对码…（$netHint）"
+                } else {
+                    "配对码仅本机可用；跨设备请让对方扫码或粘贴连接串"
                 }
             }.onFailure { e ->
-                statusText = "创建协作失败，请重试"
+                statusText = when {
+                    e.message?.contains("会合服务器不可达") == true ->
+                        "会合服务器不可达，请检查设置中的服务器地址"
+                    else -> "创建协作失败，请重试"
+                }
                 println("[JUAN] createRoom failed: ${e.stackTraceToString()}")
             }
         }
     }
 
-    /** 加入协作（响应方）：粘贴对方二维码连接串（TCP 连接放后台线程） */
+    /**
+     * 加入协作（响应方）。
+     *
+     * 输入形态自动分流：
+     * - **短配对码**（如 `5689-ABCN`）→ 经会合服务器换回完整配对信息
+     * - **完整连接串**（二维码 JSON）→ 直接解析，无需服务器（保留兼容）
+     */
     fun join(raw: String) {
         if (!requireTurnSetup()) return
-        val info = runCatching { PairingCodec.fromQrPayload(raw) }.getOrNull()
-        if (info == null) {
-            statusText = "连接串无效，请粘贴完整二维码内容"
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) {
+            statusText = "请输入配对码，或粘贴完整连接串"
             return
         }
-        val hasTcp = info.candidates.any { it.type == "tcp" }
-        val hasRelay = info.candidates.any { it.type == "relay" }
-        println("[JUAN] join: 二维码候选 ${info.candidates.joinToString { "${it.host}:${it.port}(type=${it.type})" }}, hasTcp=$hasTcp, hasRelay=$hasRelay")
-        showConnection = true
-        statusText = when {
-            hasTcp -> "正在尝试局域网直连…"
-            hasRelay -> "正在尝试中继连接…"
-            else -> "正在连接…"
+        if (!RendezvousCodeFormat.looksLikeCode(trimmed) && !trimmed.startsWith("{")) {
+            statusText = "配对码格式不对（应为 5689-ABCN 形式），或粘贴完整连接串"
+            return
         }
+
+        statusText = "正在解析配对信息…"
         appScope.launch {
+            val info = withContext(Dispatchers.Default) {
+                resolvePairingInfo(trimmed)
+            }
+            if (info == null) return@launch   // 失败原因已由 resolvePairingInfo 写入 statusText
+
+            val hasTcp = info.candidates.any { it.type == "tcp" }
+            val hasRelay = info.candidates.any { it.type == "relay" }
+            println("[JUAN] join: 候选 ${info.candidates.joinToString { "${it.host}:${it.port}(type=${it.type})" }}, hasTcp=$hasTcp, hasRelay=$hasRelay")
+            showConnection = true
+            statusText = when {
+                hasTcp -> "正在尝试局域网直连…"
+                hasRelay -> "正在尝试中继连接…"
+                else -> "正在连接…"
+            }
             val ok = withContext(Dispatchers.Default) {
                 runCatching { session.connectAsResponder(info) }.getOrElse {
                     println("[JUAN] join failed: ${it.stackTraceToString()}")
@@ -420,6 +507,88 @@ class AppState(
                 hasTcp && !hasRelay -> "连接失败：局域网直连失败，请连接同一 Wi-Fi 后重试"
                 hasRelay -> "连接失败：中继不可达，请稍后重试"
                 else -> "连接失败（地址不可达）"
+            }
+        }
+    }
+
+    /**
+     * 把用户输入解析成 [PairingInfo]。
+     * 短码 → 服务器换取；连接串 → 本地解析。失败时写入 statusText 并返回 null。
+     */
+    private suspend fun resolvePairingInfo(input: String): PairingInfo? {
+        if (input.startsWith("{")) {
+            val p = runCatching { PairingCodec.fromQrPayload(input) }.getOrNull()
+            if (p == null) {
+                statusText = "连接串无效，请粘贴完整二维码内容"
+                return null
+            }
+            // 校验魔数/版本/有效期（短码路径由服务器 TTL 保证，连接串必须本地校验）
+            if (!PairingCodec.isValid(p)) {
+                statusText = "连接串已过期或版本不匹配，请让对方重新创建"
+                return null
+            }
+            return p
+        }
+
+        val code = RendezvousCodeFormat.normalize(input)
+        if (!RendezvousCodeFormat.validate(code)) {
+            statusText = "配对码校验位不对，请核对后重新输入"
+            return null
+        }
+        if (!rendezvousConfig.enabled) {
+            // 未配置服务器：尝试本机兜底（同机双开自测场景）
+            val local = pairingManager.lookupCode(code)
+            if (local != null) return local
+            statusText = "未配置会合服务器，无法远程解析配对码；请在设置中填写服务器地址"
+            return null
+        }
+
+        statusText = "正在向服务器查询配对码…"
+        val wire = withContext(Dispatchers.IO) {
+            rendezvous.lookup(code, rendezvousConfig)
+        }
+        if (wire == null) {
+            // 区分「服务器不可达」与「码不存在/过期」能让用户少走弯路
+            val online = withContext(Dispatchers.IO) { rendezvous.ping(rendezvousConfig) }
+            rendezvousOnline = online
+            statusText = if (online) {
+                "配对码无效、已过期或已被使用，请让对方重新创建"
+            } else {
+                "会合服务器不可达，请检查网络与设置中的服务器地址"
+            }
+            return null
+        }
+        rendezvousOnline = true
+        val parsed = runCatching { PairingCodec.fromQrPayload(wire.json) }.getOrNull()
+        if (parsed == null) {
+            statusText = "服务器返回的配对信息无法解析，版本可能不匹配"
+            return null
+        }
+        if (!PairingCodec.isValid(parsed)) {
+            statusText = "该配对码已过期，请让对方重新创建"
+            return null
+        }
+        return parsed
+    }
+
+    /** 保存会合服务配置：持久化 + 后台探活 */
+    fun saveRendezvousConfig(config: RendezvousConfig) {
+        val normalized = config.normalized()
+        rendezvousConfig = normalized
+        runCatching { rendezvousConfigIo.save(RendezvousConfigJson.encode(normalized)) }
+        if (!normalized.enabled) {
+            rendezvousOnline = null
+            statusText = "已清除会合服务器；跨设备将只能扫码或用连接串"
+            return
+        }
+        statusText = "正在测试会合服务器…"
+        appScope.launch {
+            val ok = withContext(Dispatchers.IO) { rendezvous.ping(normalized) }
+            rendezvousOnline = ok
+            statusText = if (ok) {
+                "会合服务器已连通，短配对码可用"
+            } else {
+                "会合服务器不可达（${normalized.baseUrl()}），请检查地址与端口"
             }
         }
     }

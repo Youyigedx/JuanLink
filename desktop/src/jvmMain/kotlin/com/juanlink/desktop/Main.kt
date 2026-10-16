@@ -27,6 +27,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.juanlink.composeui.AppState
+import com.juanlink.composeui.platform.RendezvousConfigIo
 import com.juanlink.composeui.platform.SnapshotIo
 import com.juanlink.composeui.platform.TurnConfigIo
 import com.juanlink.composeui.theme.JuanTheme
@@ -98,6 +99,20 @@ class DesktopTurnConfigIo : TurnConfigIo {
     }
 }
 
+/** 桌面会合服务配置持久化：user.home/.juanlink/rendezvous.json */
+class DesktopRendezvousConfigIo : RendezvousConfigIo {
+    private val file = File(System.getProperty("user.home"), ".juanlink/rendezvous.json")
+    override fun load(): String? = runCatching {
+        if (file.exists()) file.readText() else null
+    }.getOrNull()
+    override fun save(text: String) {
+        runCatching {
+            file.parentFile?.mkdirs()
+            file.writeText(text)
+        }
+    }
+}
+
 /** 桌面图片导入：文件选择器 → 字节 → 共享 AppState */
 private fun importImageFromDisk(app: AppState) {
     val chooser = JFileChooser()
@@ -111,7 +126,11 @@ private fun importImageFromDisk(app: AppState) {
 @Composable
 fun AppRoot() {
     val app = remember {
-        AppState(snapshotIo = DesktopSnapshotIo(), turnConfigIo = DesktopTurnConfigIo())
+        AppState(
+            snapshotIo = DesktopSnapshotIo(),
+            turnConfigIo = DesktopTurnConfigIo(),
+            rendezvousConfigIo = DesktopRendezvousConfigIo(),
+        )
     }
     JuanTheme {
         Box(Modifier.fillMaxSize()) {
@@ -239,6 +258,8 @@ fun AppRoot() {
                             onClose = { app.closePanel() },
                             onJoin = { raw -> app.join(raw) },
                             onDisconnect = { app.disconnect() },
+                            codeIsRemote = app.pairingCodeIsRemote,
+                            shortCodeEnabled = app.rendezvousConfig.enabled,
                         )
                     }
                 }
@@ -260,6 +281,9 @@ fun AppRoot() {
                             onClose = { app.dismissSetup() },
                             locked = app.setupLocked,
                             onSkip = { app.skipSetup() },
+                            rendezvous = app.rendezvousConfig,
+                            rendezvousOnline = app.rendezvousOnline,
+                            onSaveRendezvous = { app.saveRendezvousConfig(it) },
                         )
                     }
                 }
@@ -280,6 +304,9 @@ fun AppRoot() {
                                 app.showSettings = false
                             },
                             onClose = { app.showSettings = false },
+                            rendezvous = app.rendezvousConfig,
+                            rendezvousOnline = app.rendezvousOnline,
+                            onSaveRendezvous = { app.saveRendezvousConfig(it) },
                         )
                     }
                 }

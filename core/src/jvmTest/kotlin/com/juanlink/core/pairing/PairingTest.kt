@@ -104,4 +104,43 @@ class PairingTest {
         repeat(5) { assertNull(mgr.lookupCode("0000-AAAA")) }
         assertNull(mgr.lookupCode("0000-AAAA")) // 第 6 次被限流（即使码正确也无法查询）
     }
+
+    @Test
+    fun registerWithServerIssuedCodeIsLookupableAndNormalized() {
+        // 服务端模式下短码权威在服务器：本地表按服务器下发的码登记，
+        // 且登记时即标准化（带连字符/小写/空格都应能查到）。
+        //
+        // ⚠️ 这里必须用**校验位正确**的码（PairingCode.sample()）。
+        // 用 "5689-ABCD" 这类校验位错误的串会先被 validate() 拦掉，
+        // 测不到「标准化登记」这条路径——这正是它一开始失败的原因。
+        val clock = mutableListOf(1000L)
+        val mgr = manager(clock)
+        val info = mgr.issue("dev-1", publicKey())
+        val sample = PairingCode.sample()
+        assertTrue(PairingCode.validate(sample), "样例码本身必须合法: $sample")
+
+        val stored = mgr.registerCode(info, sample.lowercase())
+        assertEquals(PairingCode.normalize(sample), stored, "登记时应标准化")
+        assertEquals(1, mgr.pendingCodeCount)
+
+        // 用另一种书写形式（带空格）查询也应命中
+        val found = mgr.lookupCode(sample.replace("-", " "))
+        assertNotNull(found, "标准化后应能用带空格的写法查到")
+        assertEquals(info.sessionId, found.sessionId)
+        // 一次性：查过即移除
+        assertEquals(0, mgr.pendingCodeCount)
+        assertNull(mgr.lookupCode(sample))
+    }
+
+    @Test
+    fun sampleCodeIsValid() {
+        // 回归钉子：文档、UI 提示、测试共用同一个样例码。
+        // 曾经 `5689-ABCD` 的校验位是错的（正确校验位是 'N'），
+        // 用户照抄 UI 提示会被判「校验位不对」。此测试防止再犯。
+        val sample = PairingCode.sample()
+        assertTrue(PairingCode.validate(sample), "样例码 $sample 必须通过校验（文档与 UI 都在引用它）")
+        assertEquals("5689ABCN", PairingCode.normalize(sample))
+        // 校验位确实是 'N'
+        assertEquals('N', PairingCode.checkChar("5689ABC"))
+    }
 }

@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.remember
+import com.juanlink.android.io.AndroidRendezvousConfigIo
 import com.juanlink.android.io.AndroidSnapshotIo
 import com.juanlink.android.io.AndroidTurnConfigIo
 import com.juanlink.android.ui.AndroidRoot
@@ -18,6 +19,7 @@ class MainActivity : ComponentActivity() {
                 AppState(
                     snapshotIo = AndroidSnapshotIo(applicationContext),
                     turnConfigIo = AndroidTurnConfigIo(applicationContext),
+                    rendezvousConfigIo = AndroidRendezvousConfigIo(applicationContext),
                 )
             }
             AndroidRoot(app)

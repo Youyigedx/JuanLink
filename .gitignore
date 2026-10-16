@@ -27,6 +27,13 @@ hs_err_pid*.log
 # 发行包
 *.zip
 
+# Python（会合服务：不提交字节码缓存）
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
 # OS
 .DS_Store
 Thumbs.db
