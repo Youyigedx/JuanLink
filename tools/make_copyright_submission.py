@@ -108,7 +108,8 @@ def build_lines(root: str, files: list[str], header: str, lines_per_page: int):
     产出 (rows, total_lines, total_pages)。
 
     rows: [(kind, text)]，kind ∈ {"file", "code"}
-    每页恰好 lines_per_page 行；页眉占第 1 行，代码占其余。
+    页眉占每页第 1 行，正文行由 [chunk_pages] 按 lines_per_page 切分
+    （末页补空行，保证每页都满足官方的「程序每页 ≥50 行」）。
     """
     rows: list[tuple[str, str]] = []
     for rel in files:
@@ -124,8 +125,19 @@ def build_lines(root: str, files: list[str], header: str, lines_per_page: int):
 
 
 def chunk_pages(rows, lines_per_page):
-    """按页切分，每页 lines_per_page 行。"""
-    return [rows[i:i + lines_per_page] for i in range(0, len(rows), lines_per_page)]
+    """
+    按页切分，**每页恰好 lines_per_page 行**（末页用空行补齐）。
+
+    为什么必须补齐：官方要求「程序每页 ≥50 行」。若不补，总行数除不尽时
+    最后一页可能只剩几行——实测本项目 14,951 行切成 300 页后，
+    第 300 页只有 1 行。而「后 30 页」恰好包含这一页，直接构成材料瑕疵。
+    """
+    pages = [rows[i:i + lines_per_page] for i in range(0, len(rows), lines_per_page)]
+    if pages:
+        last = pages[-1]
+        if len(last) < lines_per_page:
+            pages[-1] = last + [("code", "")] * (lines_per_page - len(last))
+    return pages
 
 
 def select_first_last(pages, count=30):
