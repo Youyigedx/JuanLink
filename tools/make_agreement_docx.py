@@ -79,17 +79,46 @@ def run(cmd, **kw):
     return r
 
 
+def _retry(fn, attempts=8, delay=2.0):
+    """
+    重试一个文件操作。
+
+    背景：成品 docx 常被预览程序（资源管理器预览窗格、GUI 文件卡片）持有句柄，
+    导致 create / 覆盖失败。这里退避重试，而不是让整个生成过程失败。
+    """
+    import time
+    last = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:          # noqa: BLE001 - 需要吞掉各种 IO 异常
+            last = e
+            time.sleep(delay * (i + 1))
+    raise last
+
+
+def prepare_target(path):
+    """释放 officecli 常驻并删除旧文件；被占用时重试。"""
+    run(f'officecli close "{path}"')
+    if not os.path.exists(path):
+        return
+    _retry(lambda: os.remove(path))
+
+
 def main(argv):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out = argv[0] if argv else os.path.join(root, "out", "软著", "合作开发协议.docx")
     os.makedirs(os.path.dirname(out), exist_ok=True)
 
-    if os.path.exists(out):
-        # 覆盖前先让 officecli 释放可能持有的句柄
-        run(f'officecli close "{out}"')
+    try:
+        prepare_target(out)
+    except Exception as e:              # noqa: BLE001
+        print(f"无法删除旧文件（可能被预览程序占用）：{e}", file=sys.stderr)
+        print("请关闭该文件的预览后重试。", file=sys.stderr)
+        return 1
 
     r = run(f'officecli create "{out}"')
-    if r.returncode not in (0, 1) or not os.path.exists(out):
+    if not os.path.exists(out):
         print("create 失败:", r.stdout, r.stderr, file=sys.stderr)
         return 1
 

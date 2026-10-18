@@ -200,7 +200,7 @@ python3 server/rendezvous_server.py --port 8080 --token "$(openssl rand -hex 16)
 
 [MIT](LICENSE) © 2026 赵裕轩、吴芸
 
-> 著作权人：**赵裕轩**（第一位）、**吴芸（Wu Yun）**（第二位）。
+> 著作权人：**赵裕轩（Zhao Yuxuan）**（第一位）、**吴芸（Wu Yun）**（第二位）。
 >
 > 本软件为**合作开发**成果（非职务开发），申请表「开发方式」填**合作开发**，
 > 并随申请材料提交《合作开发协议》。协议模板见
