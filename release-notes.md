@@ -49,8 +49,8 @@
 
 ### 平台
 
-- 桌面：Windows / macOS / Linux（Compose Desktop）
-- Android：**API 33+**（`minSdk 33` / `targetSdk 35`，含 CameraX 扫码加入）
+- 桌面：**Windows 11**（Compose Desktop）；macOS / Linux 代码可移植但**未构建、未实测**
+- Android：**API 33+**（`minSdk 33` / `targetSdk 35`，含 CameraX 扫码加入），已在真机跑通双机协作
 - iOS：工程骨架占位，**无 Kotlin 源码，未实现**
 
 ### 已知边界
@@ -99,6 +99,8 @@
 ### 平台
 
 - 桌面：Windows / macOS / Linux（Compose Desktop）
+  > ⚠️ 此为 v0.2.0 当时的描述。**实际构建并验证的只有 Windows**；
+  > macOS / Linux 未构建、未实测。现行口径见 v1.0.0 的「平台」一节。
 - Android（含 CameraX 扫码加入）
 - iOS：工程骨架占位，UI 层未实现
 

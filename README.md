@@ -60,8 +60,9 @@ Juan LinK 是 P2P 协作画板。一端点“创建协作”，另一端扫码�
 
 | 平台 | 状态 |
 |---|---|
-| Windows、macOS、Linux 桌面 | 可用 |
-| Android（含摄像头扫码加入） | 可用（需 API 33+） |
+| Windows 桌面 | **可用**（Windows 11 实测；Compose Desktop 代码同样可在 macOS / Linux 构建运行，但这二者**尚未实测**） |
+| Android（含摄像头扫码加入） | 可用（需 API 33+，已在真机跑通双机协作） |
+| macOS / Linux 桌面 | 未做：代码层面基于 Compose Multiplatform 可移植，但**未构建、未验证** |
 | iOS | 只有工程骨架，UI 没做 |
 
 其他边界：
