@@ -197,9 +197,13 @@ python3 server/rendezvous_server.py --port 8080 --token "$(openssl rand -hex 16)
 
 ## License
 
-[MIT](LICENSE) © 2026 赵裕轩
+[MIT](LICENSE) © 2026 赵裕轩、吴芸
 
-> 本软件为**非职务开发的独立开发**成果，著作权人：赵裕轩。
+> 著作权人：**赵裕轩**（第一位）、**吴芸（Wu Yun）**（第二位）。
+>
+> ⚠️ 共同著作权人意味着申请表「开发方式」通常应填**合作开发**并提交《合作开发协议》，
+> 而非此前的「单独开发」。最终口径以申请人与版权中心的确认结果为准，
+> 详见 [`docs/交接-软著申请进度.md`](docs/交接-软著申请进度.md) 第七节。
 
 > ⚠️ 第三方开源组件声明：本项目 `composeUi` 模块内含 vendored 的 **DrawBox**
 > （Apache-2.0，作者 Akshay Sharma），位于 `composeUi/src/commonMain/kotlin/io/ak1/drawbox/`，
